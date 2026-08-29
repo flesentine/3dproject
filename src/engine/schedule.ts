@@ -45,6 +45,7 @@ function validDependencies(project: ProjectModel): Dependency[] {
   return project.dependencies.filter(
     (dependency) =>
       dependency.fromTaskId !== dependency.toTaskId &&
+      Number.isInteger(dependency.lagDays) &&
       schedulableIds.has(dependency.fromTaskId) &&
       schedulableIds.has(dependency.toTaskId),
   )
