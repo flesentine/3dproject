@@ -6,12 +6,13 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 0 — Foundation is in progress.**
+**Build 1 — Critical Path and Drivers is complete.**
 
-The app now has a React/TypeScript/Three.js foundation, an independent project/schedule domain model, a pure TypeScript schedule-engine boundary, an AURORA demonstration schedule, and the first interactive spatial schedule world.
+The app now has a React/TypeScript/Three.js spatial schedule world backed by a pure TypeScript scheduling engine with working-day CPM, total float, critical-path analysis, and selected-activity driver tracing.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
-- Build 0 notes and exit criteria: [`docs/BUILD_0.md`](docs/BUILD_0.md)
+- Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
+- Build 1 critical path and drivers: [`docs/BUILD_1.md`](docs/BUILD_1.md)
 
 ## Product rule
 
@@ -26,13 +27,16 @@ npm install
 npm run dev
 ```
 
-Production validation:
+Validation:
 
 ```bash
+npm test
 npm run build
 ```
 
-## Current Build 0 capabilities
+## Current capabilities
+
+### Spatial schedule
 
 - Structured 3D schedule world
 - Six stable workstream lanes
@@ -42,19 +46,37 @@ npm run build
 - Milestone beacons
 - Orbit and zoom navigation
 - Click selection and 2D inspector
-- Selective immediate dependency rendering
-- Full upstream/downstream graph traversal in the schedule engine
-- Project-model validation
+- Stable geography across analysis modes
+
+### Schedule analysis
+
+- Monday-Friday working calendar
+- FS / SS / FF / SF dependencies
+- Whole-working-day lag and lead
+- Topological schedule analysis
+- Dependency-cycle detection
+- CPM forward and backward passes
+- Early and late dates
+- Total float
+- Global critical path
+- Critical dependency chain
+- Full upstream/downstream traversal
+- Controlling-driver chain for any selected activity
+
+### Analysis views
+
+- **Normal** — immediate dependency context around the selected activity
+- **Critical Path** — fades non-critical work and exposes the zero-float network
+- **Drivers** — fades unrelated work and exposes only the chain controlling the selected target
 
 ## Initial V0.1 direction
 
-- Hierarchical drill-down with stable spatial geography
-- Dependency tracing
-- Critical path and float
 - Scenario-based date changes
 - Animated schedule propagation
 - Baseline ghost comparison
+- Hierarchical drill-down with semantic zoom
 - Search, focus, breadcrumbs, and return-to-Today navigation
 - Simple 2D task table using the same project engine
+- Later project/resource calendars and holidays
 
 See the master specification for the complete product thesis, interaction model, data model, technical architecture, prototype acceptance test, roadmap, and competitive/IP notes.
