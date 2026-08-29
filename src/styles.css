@@ -106,7 +106,7 @@ button:focus-visible {
 
 .workspace {
   display: grid;
-  grid-template-columns: 245px minmax(0, 1fr) 295px;
+  grid-template-columns: 245px minmax(0, 1fr) 315px;
   min-height: 0;
 }
 
@@ -128,7 +128,8 @@ button:focus-visible {
 
 .panel-copy,
 .empty-inspector p,
-.foundation-note p {
+.foundation-note p,
+.mode-description {
   color: #8e9bad;
   font-size: 0.82rem;
   line-height: 1.55;
@@ -173,6 +174,70 @@ button:focus-visible {
   text-align: right;
 }
 
+.detail-list .critical-row {
+  background: #21171a;
+}
+
+.detail-list .critical-row dt,
+.detail-list .critical-row dd {
+  color: #ff9a8c;
+}
+
+.analysis-controls {
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid #213247;
+  border-radius: 10px;
+  background: #0f1823;
+}
+
+.control-title {
+  display: block;
+  margin-bottom: 9px;
+  color: #a9b8ca;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.mode-button {
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid #293a4e;
+  border-radius: 7px;
+  color: #8fa1b6;
+  background: #111c28;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mode-button:hover:not(:disabled) {
+  color: #dce8f5;
+  border-color: #446382;
+}
+
+.mode-button.active {
+  color: #e9f4ff;
+  border-color: #5e83aa;
+  background: #17283a;
+}
+
+.mode-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.mode-description {
+  min-height: 38px;
+  margin: 9px 0 0;
+  font-size: 0.74rem;
+}
+
 .control-hint {
   display: grid;
   gap: 7px;
@@ -199,6 +264,38 @@ button:focus-visible {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.viewport-mode {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  pointer-events: none;
+}
+
+.critical-mode-chip,
+.driver-mode-chip {
+  display: inline-block;
+  max-width: min(420px, 72vw);
+  padding: 7px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  background: rgba(9, 14, 21, 0.88);
+  font-size: 0.72rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.critical-mode-chip {
+  color: #ff9a8c;
+  border-color: #663b3a;
+}
+
+.driver-mode-chip {
+  color: #a9d9ff;
+  border-color: #365b79;
 }
 
 .viewport-caption {
@@ -245,15 +342,49 @@ button:focus-visible {
   color: #d8e4f1;
 }
 
-.task-kind {
-  display: inline-block;
+.task-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 8px 0 17px;
+}
+
+.task-kind,
+.critical-badge {
+  display: inline-block;
+  margin: 0;
   padding: 3px 7px;
   border: 1px solid #2b3b4e;
   border-radius: 999px;
   color: #8093a9;
   font-size: 0.68rem;
   text-transform: uppercase;
+}
+
+.critical-badge {
+  color: #ff9a8c;
+  border-color: #603635;
+  background: #21171a;
+}
+
+.primary-action {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 14px;
+  padding: 9px 12px;
+  border: 1px solid #456b90;
+  border-radius: 8px;
+  color: #d9eafb;
+  background: #18314a;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.primary-action:hover,
+.primary-action.active {
+  border-color: #73a8d5;
+  background: #1e405f;
 }
 
 .foundation-note {
