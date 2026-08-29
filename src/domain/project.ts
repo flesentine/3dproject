@@ -55,9 +55,35 @@ export interface ValidationIssue {
   dependencyId?: string
 }
 
+export interface ActivityScheduleMetrics {
+  taskId: string
+  durationWorkdays: number
+  earlyStartOffset: number
+  earlyFinishOffset: number
+  lateStartOffset: number
+  lateFinishOffset: number
+  totalFloatDays: number
+  earlyStart: ISODate
+  earlyFinish: ISODate
+  lateStart: ISODate
+  lateFinish: ISODate
+  isCritical: boolean
+}
+
+export interface DriverAnalysis {
+  targetTaskId: string
+  taskIds: string[]
+  dependencyIds: string[]
+}
+
 export interface ScheduleAnalysis {
   dateRange: ProjectDateRange
   upstreamByTask: Map<string, string[]>
   downstreamByTask: Map<string, string[]>
   validationIssues: ValidationIssue[]
+  activityByTask: Map<string, ActivityScheduleMetrics>
+  topologicalOrder: string[]
+  criticalTaskIds: string[]
+  criticalDependencyIds: string[]
+  networkSpanWorkdays: number
 }
