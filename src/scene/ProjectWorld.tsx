@@ -1,7 +1,7 @@
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import { useMemo, useState } from 'react'
 import { DoubleSide } from 'three'
-import type { ProjectModel, ProjectTask } from '../domain/project'
+import type { DriverAnalysis, ProjectModel, ScheduleAnalysis } from '../domain/project'
 import { useProjectStore } from '../state/useProjectStore'
 import { buildWorldLayout, type TaskVisual } from '../visualization/layout'
 
@@ -14,37 +14,82 @@ const workstreamColors = [
   '#76b7b2',
 ]
 
+const criticalColor = '#ff816f'
+const driverColor = '#9bc6f5'
+
 interface ProjectWorldProps {
   project: ProjectModel
+  analysis: ScheduleAnalysis
+  drivers: DriverAnalysis
 }
 
-function TaskBlock({ visual, color }: { visual: TaskVisual; color: string }) {
+interface TaskBlockProps {
+  visual: TaskVisual
+  color: string
+  analysis: ScheduleAnalysis
+  driverTaskIds: Set<string>
+}
+
+function TaskBlock({ visual, color, analysis, driverTaskIds }: TaskBlockProps) {
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
+  const analysisMode = useProjectStore((state) => state.analysisMode)
   const selectTask = useProjectStore((state) => state.selectTask)
   const [hovered, setHovered] = useState(false)
   const selected = selectedTaskId === visual.task.id
+  const metrics = analysis.activityByTask.get(visual.task.id)
+  const isCritical = metrics?.isCritical ?? false
+  const isDriver = driverTaskIds.has(visual.task.id)
+  const emphasized =
+    selected ||
+    analysisMode === 'normal' ||
+    (analysisMode === 'critical' && isCritical) ||
+    (analysisMode === 'drivers' && isDriver)
+  const muted = !emphasized
+  const analysisColor =
+    analysisMode === 'critical' && isCritical
+      ? criticalColor
+      : analysisMode === 'drivers' && isDriver
+        ? driverColor
+        : color
   const { task, position, size } = visual
+
+  const pointerHandlers = {
+    onPointerEnter: (event: { stopPropagation: () => void }) => {
+      event.stopPropagation()
+      setHovered(true)
+    },
+    onPointerLeave: () => setHovered(false),
+    onClick: (event: { stopPropagation: () => void }) => {
+      event.stopPropagation()
+      selectTask(task.id)
+    },
+  }
 
   if (task.kind === 'milestone') {
     return (
-      <group position={position}>
+      <group position={position} {...pointerHandlers}>
         <mesh
-          scale={selected ? 1.25 : hovered ? 1.12 : 1}
+          scale={selected ? 1.25 : hovered ? 1.12 : emphasized ? 1 : 0.82}
           rotation={[0, Math.PI / 4, 0]}
-          onPointerEnter={(event) => {
-            event.stopPropagation()
-            setHovered(true)
-          }}
-          onPointerLeave={() => setHovered(false)}
-          onClick={(event) => {
-            event.stopPropagation()
-            selectTask(task.id)
-          }}
         >
           <octahedronGeometry args={[0.55, 0]} />
-          <meshStandardMaterial color={selected ? '#ffffff' : color} emissive={selected ? color : '#000000'} emissiveIntensity={selected ? 0.55 : 0} />
+          <meshStandardMaterial
+            color={selected ? '#ffffff' : analysisColor}
+            emissive={selected || (analysisMode !== 'normal' && emphasized) ? analysisColor : '#000000'}
+            emissiveIntensity={selected ? 0.55 : analysisMode !== 'normal' && emphasized ? 0.32 : 0}
+            transparent={muted}
+            opacity={muted ? 0.12 : 1}
+            depthWrite={!muted}
+          />
         </mesh>
-        <Text position={[0, 1.05, 0]} fontSize={0.34} color="#e8edf4" anchorX="center" anchorY="middle" maxWidth={3.2}>
+        <Text
+          position={[0, 1.05, 0]}
+          fontSize={0.34}
+          color={muted ? '#3f4b5a' : '#e8edf4'}
+          anchorX="center"
+          anchorY="middle"
+          maxWidth={3.2}
+        >
           {task.name}
         </Text>
       </group>
@@ -55,27 +100,30 @@ function TaskBlock({ visual, color }: { visual: TaskVisual; color: string }) {
   const progressZ = -size[2] / 2 + progressDepth / 2
 
   return (
-    <group position={position}>
-      <mesh
-        scale={selected ? [1.04, 1.18, 1.02] : hovered ? [1.02, 1.08, 1.01] : [1, 1, 1]}
-        onPointerEnter={(event) => {
-          event.stopPropagation()
-          setHovered(true)
-        }}
-        onPointerLeave={() => setHovered(false)}
-        onClick={(event) => {
-          event.stopPropagation()
-          selectTask(task.id)
-        }}
-      >
+    <group position={position} {...pointerHandlers}>
+      <mesh scale={selected ? [1.04, 1.18, 1.02] : hovered ? [1.02, 1.08, 1.01] : [1, 1, 1]}>
         <boxGeometry args={size} />
-        <meshStandardMaterial color={selected ? '#dfe8f5' : '#293442'} roughness={0.72} metalness={0.08} />
+        <meshStandardMaterial
+          color={selected ? '#dfe8f5' : analysisMode !== 'normal' && emphasized ? analysisColor : '#293442'}
+          roughness={0.72}
+          metalness={0.08}
+          transparent={muted}
+          opacity={muted ? 0.1 : 1}
+          depthWrite={!muted}
+        />
       </mesh>
 
       {progressDepth > 0 && (
         <mesh position={[0, 0.02, progressZ]}>
           <boxGeometry args={[size[0] * 0.96, size[1] * 1.04, progressDepth]} />
-          <meshStandardMaterial color={color} roughness={0.62} metalness={0.1} />
+          <meshStandardMaterial
+            color={analysisColor}
+            roughness={0.62}
+            metalness={0.1}
+            transparent={muted}
+            opacity={muted ? 0.08 : 1}
+            depthWrite={!muted}
+          />
         </mesh>
       )}
 
@@ -88,32 +136,52 @@ function TaskBlock({ visual, color }: { visual: TaskVisual; color: string }) {
   )
 }
 
-function SelectedDependencies({ project, visuals }: { project: ProjectModel; visuals: TaskVisual[] }) {
+function AnalysisDependencies({
+  project,
+  analysis,
+  drivers,
+  visuals,
+}: {
+  project: ProjectModel
+  analysis: ScheduleAnalysis
+  drivers: DriverAnalysis
+  visuals: TaskVisual[]
+}) {
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
+  const analysisMode = useProjectStore((state) => state.analysisMode)
   const positions = useMemo(() => new Map(visuals.map((visual) => [visual.task.id, visual.position])), [visuals])
+  const criticalDependencyIds = useMemo(() => new Set(analysis.criticalDependencyIds), [analysis.criticalDependencyIds])
+  const driverDependencyIds = useMemo(() => new Set(drivers.dependencyIds), [drivers.dependencyIds])
 
-  if (!selectedTaskId) return null
+  const dependencies = project.dependencies.filter((dependency) => {
+    if (analysisMode === 'critical') return criticalDependencyIds.has(dependency.id)
+    if (analysisMode === 'drivers') return driverDependencyIds.has(dependency.id)
+    return Boolean(selectedTaskId) && (dependency.fromTaskId === selectedTaskId || dependency.toTaskId === selectedTaskId)
+  })
+
+  if (dependencies.length === 0) return null
+
+  const color = analysisMode === 'critical' ? criticalColor : analysisMode === 'drivers' ? driverColor : '#dbe7f5'
+  const lineWidth = analysisMode === 'normal' ? 1.6 : 2.6
 
   return (
     <group>
-      {project.dependencies
-        .filter((dependency) => dependency.fromTaskId === selectedTaskId || dependency.toTaskId === selectedTaskId)
-        .map((dependency) => {
-          const from = positions.get(dependency.fromTaskId)
-          const to = positions.get(dependency.toTaskId)
-          if (!from || !to) return null
+      {dependencies.map((dependency) => {
+        const from = positions.get(dependency.fromTaskId)
+        const to = positions.get(dependency.toTaskId)
+        if (!from || !to) return null
 
-          return (
-            <Line
-              key={dependency.id}
-              points={[from, to]}
-              color="#dbe7f5"
-              lineWidth={1.6}
-              transparent
-              opacity={0.82}
-            />
-          )
-        })}
+        return (
+          <Line
+            key={dependency.id}
+            points={[from, to]}
+            color={color}
+            lineWidth={lineWidth}
+            transparent
+            opacity={analysisMode === 'normal' ? 0.82 : 0.95}
+          />
+        )
+      })}
     </group>
   )
 }
@@ -146,9 +214,10 @@ function WorkstreamLabels({ project, visuals }: { project: ProjectModel; visuals
   )
 }
 
-export function ProjectWorld({ project }: ProjectWorldProps) {
+export function ProjectWorld({ project, analysis, drivers }: ProjectWorldProps) {
   const layout = useMemo(() => buildWorldLayout(project), [project])
   const selectTask = useProjectStore((state) => state.selectTask)
+  const driverTaskIds = useMemo(() => new Set(drivers.taskIds), [drivers.taskIds])
   const colorByWorkstream = useMemo(
     () => new Map(project.workstreams.map((workstream, index) => [workstream.id, workstreamColors[index % workstreamColors.length]])),
     [project.workstreams],
@@ -184,10 +253,16 @@ export function ProjectWorld({ project }: ProjectWorldProps) {
       </Text>
 
       <WorkstreamLabels project={project} visuals={layout.tasks} />
-      <SelectedDependencies project={project} visuals={layout.tasks} />
+      <AnalysisDependencies project={project} analysis={analysis} drivers={drivers} visuals={layout.tasks} />
 
       {layout.tasks.map((visual) => (
-        <TaskBlock key={visual.task.id} visual={visual} color={colorByWorkstream.get(visual.task.workstreamId) ?? '#6f8298'} />
+        <TaskBlock
+          key={visual.task.id}
+          visual={visual}
+          color={colorByWorkstream.get(visual.task.workstreamId) ?? '#6f8298'}
+          analysis={analysis}
+          driverTaskIds={driverTaskIds}
+        />
       ))}
     </>
   )
