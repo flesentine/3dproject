@@ -12,6 +12,10 @@ export function parseISODate(value: ISODate): Date {
   return new Date(Date.UTC(year, month - 1, day))
 }
 
+export function formatISODate(value: Date): ISODate {
+  return value.toISOString().slice(0, 10)
+}
+
 export function differenceInDays(from: ISODate, to: ISODate): number {
   return Math.round((parseISODate(to).getTime() - parseISODate(from).getTime()) / DAY_MS)
 }
@@ -34,4 +38,43 @@ export function maxISODate(values: ISODate[]): ISODate {
   }
 
   return [...values].sort(compareISODate).at(-1) as ISODate
+}
+
+export function isWorkingDay(value: Date): boolean {
+  const day = value.getUTCDay()
+  return day !== 0 && day !== 6
+}
+
+export function addWorkingDays(value: ISODate, workingDays: number): ISODate {
+  if (!Number.isInteger(workingDays)) {
+    throw new Error(`Working-day offset must be an integer: ${workingDays}`)
+  }
+
+  const cursor = parseISODate(value)
+  if (workingDays === 0) return formatISODate(cursor)
+
+  const direction = workingDays > 0 ? 1 : -1
+  let remaining = Math.abs(workingDays)
+
+  while (remaining > 0) {
+    cursor.setUTCDate(cursor.getUTCDate() + direction)
+    if (isWorkingDay(cursor)) remaining -= 1
+  }
+
+  return formatISODate(cursor)
+}
+
+export function workingDaysInclusive(from: ISODate, to: ISODate): number {
+  if (compareISODate(to, from) < 0) return 0
+
+  const cursor = parseISODate(from)
+  const finish = parseISODate(to)
+  let total = 0
+
+  while (cursor.getTime() <= finish.getTime()) {
+    if (isWorkingDay(cursor)) total += 1
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return total
 }
