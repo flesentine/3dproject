@@ -229,18 +229,19 @@ function topologicalSort(project: ProjectModel, dependencies: Dependency[]): { o
 
 function successorStartConstraint(
   dependency: Dependency,
-  predecessor: ForwardTiming | ActivityScheduleMetrics,
+  predecessorEarlyStart: number,
+  predecessorEarlyFinish: number,
   successorSpan: number,
 ): number {
   switch (dependency.type) {
     case 'FS':
-      return predecessor.earlyFinish + dependency.lagDays + 1
+      return predecessorEarlyFinish + dependency.lagDays + 1
     case 'SS':
-      return predecessor.earlyStart + dependency.lagDays
+      return predecessorEarlyStart + dependency.lagDays
     case 'FF':
-      return predecessor.earlyFinish + dependency.lagDays - successorSpan
+      return predecessorEarlyFinish + dependency.lagDays - successorSpan
     case 'SF':
-      return predecessor.earlyStart + dependency.lagDays - successorSpan
+      return predecessorEarlyStart + dependency.lagDays - successorSpan
   }
 }
 
@@ -280,7 +281,15 @@ function calculateCpm(
     for (const dependency of graph.incomingDependencies.get(taskId) ?? []) {
       const predecessor = forward.get(dependency.fromTaskId)
       if (!predecessor) continue
-      earlyStart = Math.max(earlyStart, successorStartConstraint(dependency, predecessor, span))
+      earlyStart = Math.max(
+        earlyStart,
+        successorStartConstraint(
+          dependency,
+          predecessor.earlyStart,
+          predecessor.earlyFinish,
+          span,
+        ),
+      )
     }
 
     forward.set(taskId, {
@@ -348,7 +357,16 @@ function calculateCpm(
       const predecessor = activityByTask.get(dependency.fromTaskId)
       const successor = activityByTask.get(dependency.toTaskId)
       if (!predecessor || !successor) return false
-      return successor.earlyStartOffset === successorStartConstraint(dependency, predecessor, successor.earlyFinishOffset - successor.earlyStartOffset)
+      const successorSpan = successor.earlyFinishOffset - successor.earlyStartOffset
+      return (
+        successor.earlyStartOffset ===
+        successorStartConstraint(
+          dependency,
+          predecessor.earlyStartOffset,
+          predecessor.earlyFinishOffset,
+          successorSpan,
+        )
+      )
     })
     .map((dependency) => dependency.id)
 
@@ -416,7 +434,13 @@ function getDriverAnalysis(project: ProjectModel, taskId: string): DriverAnalysi
       if (!predecessor) continue
 
       const isDriving =
-        successor.earlyStartOffset === successorStartConstraint(dependency, predecessor, successorSpan)
+        successor.earlyStartOffset ===
+        successorStartConstraint(
+          dependency,
+          predecessor.earlyStartOffset,
+          predecessor.earlyFinishOffset,
+          successorSpan,
+        )
       if (!isDriving) continue
 
       driverDependencyIds.add(dependency.id)
