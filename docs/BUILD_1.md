@@ -1,12 +1,12 @@
 # Build 1 — Critical Path and Drivers
 
-**Status:** In implementation  
+**Status:** Complete  
 **Branch:** `build/1-critical-path`  
 **Purpose:** Turn the Build 0 spatial schedule shell into a real schedule-analysis experience.
 
 ## Product goal
 
-Build 1 must answer two useful questions directly in the 3D world:
+Build 1 answers two useful questions directly in the 3D world:
 
 1. **What is the project's critical path?**
 2. **What is actually controlling this selected activity or milestone?**
@@ -32,6 +32,7 @@ These are intentionally separate. The global critical path is the longest zero-f
 - Critical activity detection
 - Critical dependency detection
 - Driver-chain tracing for any selected schedulable activity
+- Invalid lag relationships rejected from CPM instead of contaminating analysis
 
 ## Build 1 calendar boundary
 
@@ -55,15 +56,16 @@ With an activity selected, unrelated geometry fades and only the controlling pre
 
 ## Inspector additions
 
-The selected-activity inspector will show:
+The selected-activity inspector shows:
 
 - Duration in working days
 - Total float
 - Critical / non-critical state
 - CPM early dates
 - CPM late dates
+- Upstream/downstream reach
 - Driver count
-- A direct **Show drivers** action
+- A direct **Show what controls this** action
 
 ## Testing
 
@@ -75,6 +77,8 @@ Build 1 introduces Vitest and makes tests part of CI. Coverage includes:
 - FS / SS / FF / SF relationship math
 - Working-day lag
 - Dependency-cycle rejection
+
+A full Build 1 UI/engine checkpoint passed the automated test suite and Vite production build before final hardening.
 
 ## Explicit non-goals
 
