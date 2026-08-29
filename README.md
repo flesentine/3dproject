@@ -6,16 +6,48 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-Pre-build product definition. The final V0.1 scope and architecture are documented in [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md).
+**Build 0 — Foundation is in progress.**
+
+The app now has a React/TypeScript/Three.js foundation, an independent project/schedule domain model, a pure TypeScript schedule-engine boundary, an AURORA demonstration schedule, and the first interactive spatial schedule world.
+
+- Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
+- Build 0 notes and exit criteria: [`docs/BUILD_0.md`](docs/BUILD_0.md)
 
 ## Product rule
 
 > No feature belongs in the prototype unless it makes a complex project easier to understand.
 
-## Initial V0.1 focus
+## Run locally
+
+Requires a current Node.js release compatible with Vite 8.
+
+```bash
+npm install
+npm run dev
+```
+
+Production validation:
+
+```bash
+npm run build
+```
+
+## Current Build 0 capabilities
 
 - Structured 3D schedule world
-- Today/horizon orientation
+- Six stable workstream lanes
+- Today/status-date plane
+- Task duration represented spatially
+- Progress fill
+- Milestone beacons
+- Orbit and zoom navigation
+- Click selection and 2D inspector
+- Selective immediate dependency rendering
+- Full upstream/downstream graph traversal in the schedule engine
+- Project-model validation
+
+## Initial V0.1 direction
+
 - Hierarchical drill-down with stable spatial geography
 - Dependency tracing
 - Critical path and float
