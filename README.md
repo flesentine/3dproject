@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 7 — Project Mini-Map and Orientation is complete.**
+**Build 8 — Full Direct Manipulation is complete.**
 
-The 3D workspace now has a permanent interactive project map that preserves the same spatial grammar as the world: workstreams left-to-right, past-to-future vertically, Today as a strong reference line, milestones as beacons, package focus as a bounded region, and the active camera focus/zoom footprint as an orientation cue. The map appears only in 3D; Table and Gantt remain uncluttered.
+The 3D workspace now supports three schedule-edit gestures on any selected normal task: resize the **START** edge, shift the whole task with **MOVE**, or resize the **FINISH** edge. All three create the same reversible schedule scenario, snap to working days, propagate downstream impact conservatively, and remain synchronized with Table, Gantt, CPM, Drivers, ghosts, Apply, and Reset.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -19,6 +19,7 @@ The 3D workspace now has a permanent interactive project map that preserves the 
 - Build 5 hierarchical semantic zoom: [`docs/BUILD_5.md`](docs/BUILD_5.md)
 - Build 6 2D twin view: [`docs/BUILD_6.md`](docs/BUILD_6.md)
 - Build 7 project mini-map and orientation: [`docs/BUILD_7.md`](docs/BUILD_7.md)
+- Build 8 full direct manipulation: [`docs/BUILD_8.md`](docs/BUILD_8.md)
 
 ## Product rule
 
@@ -54,6 +55,25 @@ npm run build
 - Normal mode respects the same hierarchy boundary in every view
 - Critical Path and Drivers cut across hierarchy consistently in every view
 
+### Full direct manipulation
+
+- Blue **START** handle resizes only the task start edge
+- Purple **MOVE** control shifts the whole task through time
+- Gold **FINISH** handle resizes only the task finish edge
+- Start/finish edges cannot cross each other
+- Whole-task movement preserves working-day duration
+- Weekend snapping follows drag direction
+- Orbit controls lock during all three gestures
+- Navigation, search, view switching, mini-map actions, and Apply/Reset lock during active drag
+- In-world date feedback while dragging
+- Every gesture produces the same reversible `ScheduleScenario`
+- `ScheduleScenario` records edit kind plus requested start/finish
+- Start-only edits can affect SS/SF relationships
+- Finish-only edits can affect FS/FF relationships
+- Whole-task movement can affect all relationship types
+- Source edits never silently rewrite predecessor activities
+- Earlier source edits do not automatically pull successors earlier
+
 ### Project orientation
 
 - Permanent 3D-only interactive mini-map
@@ -86,9 +106,6 @@ npm run build
 - Animated task movement when scenario dates change
 - Wireframe ghosts for committed positions
 - Dashed movement trails from committed to scenario positions
-- Selected-task finish handle for direct 3D editing
-- Live snapped finish-date label while dragging
-- Camera orbit lock during direct manipulation
 - Translucent work-package volumes revealed at workstream level
 
 ### 2D Table
@@ -149,14 +166,13 @@ npm run build
 
 ### Scenario simulation
 
-- Finish-date what-if preview for tasks and milestones
-- Direct finish dragging for normal tasks in 3D
+- Start-date, finish-date, and whole-task what-if preview for normal tasks
+- Exact finish-date scenario editing for tasks and milestones
 - +5 / +10 workday quick scenarios
-- Shared exact-date scenario editor
 - Conservative downstream propagation
 - Existing schedule gap can absorb a delay
 - Existing baseline relationship offsets are preserved instead of silently repaired
-- Earlier finishes do not pull successors earlier
+- Earlier source changes do not pull successors earlier
 - Scenario-aware CPM, float, critical path, and driver analysis
 - Committed versus scenario dates in the inspector and 2D views
 - **Apply** to commit the in-memory preview
@@ -170,10 +186,9 @@ npm run build
 
 ## Initial V0.1 direction
 
-- Start-edge and whole-task schedule manipulation
 - Keyboard navigation shortcuts and optional free-flight mode
 - Named scenario branches and richer undo/redo
-- Gantt drag editing only through the existing scenario engine
+- Gantt drag editing through the existing scenario engine
 - Richer recursive hierarchy below work package only if the current semantic model proves useful
 - Later project/resource calendars and holidays
 - Import/export and persistence
