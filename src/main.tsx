@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './scenario.css'
 import './directManipulation.css'
+import './navigation.css'
 
 const root = document.getElementById('root')
 
