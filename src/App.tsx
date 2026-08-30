@@ -25,6 +25,7 @@ export default function App() {
   const project = useProjectStore((state) => state.project)
   const scenario = useProjectStore((state) => state.scenario)
   const scenarioError = useProjectStore((state) => state.scenarioError)
+  const finishDrag = useProjectStore((state) => state.finishDrag)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const analysisMode = useProjectStore((state) => state.analysisMode)
   const selectTask = useProjectStore((state) => state.selectTask)
@@ -73,10 +74,10 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={finishDrag ? 'app-shell dragging-finish' : 'app-shell'}>
       <header className="topbar">
         <div>
-          <p className="eyebrow">BUILD 2 · SCENARIO PROPAGATION</p>
+          <p className="eyebrow">BUILD 3 · DIRECT MANIPULATION</p>
           <h1>{project.name}</h1>
         </div>
         <div className="project-stats" aria-label="Project model summary">
@@ -84,6 +85,7 @@ export default function App() {
           <span>{project.tasks.length} activities</span>
           <span>{analysis.criticalTaskIds.length} critical</span>
           <span>{analysis.networkSpanWorkdays} workday network</span>
+          {finishDrag && <span className="drag-stat">dragging → {finishDrag.finish}</span>}
           {scenario && <span className="scenario-stat">scenario · {scenario.changes.length} changed</span>}
           <span className={analysis.validationIssues.length === 0 ? 'healthy' : 'warning'}>
             {analysis.validationIssues.length === 0 ? 'model valid' : `${analysis.validationIssues.length} model issues`}
@@ -94,10 +96,18 @@ export default function App() {
       <section className="workspace">
         <aside className="context-panel" aria-label="Project orientation and analysis controls">
           <p className="panel-label">Spatial schedule</p>
-          <h2>Project horizon</h2>
+          <h2>Grab the schedule</h2>
           <p className="panel-copy">
-            Preview a finish-date change and watch only the additional dependency impact propagate through the existing plan.
+            Select a task, grab its finish handle, and drag through time. The same scenario engine continuously propagates only the additional downstream impact.
           </p>
+
+          <div className="direct-manipulation-card">
+            <span className="control-title">Direct edit</span>
+            <strong>1. Select a task</strong>
+            <span>2. Grab the gold finish handle</span>
+            <span>3. Drag forward or backward</span>
+            <span>4. Release → Apply or Reset</span>
+          </div>
 
           <div className="analysis-controls" aria-label="Schedule analysis mode">
             <span className="control-title">Analysis mode</span>
@@ -116,9 +126,9 @@ export default function App() {
               ))}
             </div>
             <p className="mode-description">
-              {analysisMode === 'critical' && 'Critical path is recalculated against the current scenario.'}
+              {analysisMode === 'critical' && 'Critical path is recalculated against the current preview.'}
               {analysisMode === 'drivers' && selectedTask && `Showing the chain that controls ${selectedTask.name}.`}
-              {analysisMode === 'normal' && 'Scenario movement is highlighted without rearranging workstream geography.'}
+              {analysisMode === 'normal' && 'Direct manipulation keeps geography fixed while dates and impacts change.'}
             </p>
           </div>
 
@@ -126,7 +136,7 @@ export default function App() {
             <section className="scenario-summary" aria-label="Active scenario summary">
               <div className="scenario-summary-heading">
                 <span className="scenario-dot" />
-                <strong>Scenario active</strong>
+                <strong>{finishDrag ? 'Live drag preview' : 'Scenario active'}</strong>
               </div>
               <p>
                 {scenarioSource?.name ?? 'Selected activity'} → {scenario.requestedFinish}
@@ -141,13 +151,13 @@ export default function App() {
                   <dd>{baselineAnalysis.dateRange.finish}</dd>
                 </div>
                 <div>
-                  <dt>Scenario finish</dt>
+                  <dt>Preview finish</dt>
                   <dd>{analysis.dateRange.finish}</dd>
                 </div>
               </dl>
               <div className="scenario-actions">
-                <button type="button" className="apply-button" onClick={applyScenario}>Apply</button>
-                <button type="button" className="reset-button" onClick={resetScenario}>Reset</button>
+                <button type="button" className="apply-button" onClick={applyScenario} disabled={Boolean(finishDrag)}>Apply</button>
+                <button type="button" className="reset-button" onClick={resetScenario} disabled={Boolean(finishDrag)}>Reset</button>
               </div>
             </section>
           )}
@@ -173,6 +183,7 @@ export default function App() {
 
           <div className="control-hint">
             <strong>Scenario language</strong>
+            <span>Gold handle = editable finish</span>
             <span>Amber = moved in preview</span>
             <span>Wireframe = committed position</span>
             <span>Dashed trail = schedule movement</span>
@@ -183,7 +194,9 @@ export default function App() {
           <Canvas
             dpr={[1, 1.75]}
             gl={{ antialias: true, alpha: false }}
-            onPointerMissed={() => selectTask(null)}
+            onPointerMissed={() => {
+              if (!finishDrag) selectTask(null)
+            }}
           >
             <color attach="background" args={['#080d13']} />
             <fog attach="fog" args={['#080d13', 34, 88]} />
@@ -196,7 +209,8 @@ export default function App() {
             />
           </Canvas>
           <div className="viewport-mode" aria-live="polite">
-            {scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
+            {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
+            {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
             {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
             {analysisMode === 'drivers' && selectedTask && <span className="driver-mode-chip">Drivers → {selectedTask.name}</span>}
           </div>
@@ -212,7 +226,7 @@ export default function App() {
             <>
               <div className="inspector-heading">
                 <p className="panel-label">Selected activity</p>
-                <button type="button" className="quiet-button" onClick={() => selectTask(null)} aria-label="Clear selected activity">
+                <button type="button" className="quiet-button" onClick={() => selectTask(null)} aria-label="Clear selected activity" disabled={Boolean(finishDrag)}>
                   Clear
                 </button>
               </div>
@@ -221,6 +235,7 @@ export default function App() {
                 <span className="task-kind">{selectedTask.kind}</span>
                 {selectedMetrics?.isCritical && <span className="critical-badge">Critical</span>}
                 {selectedScenarioChange && <span className="scenario-badge">Scenario moved</span>}
+                {finishDrag?.taskId === selectedTask.id && <span className="drag-badge">Dragging</span>}
               </div>
 
               <dl className="detail-list">
@@ -230,7 +245,7 @@ export default function App() {
                 </div>
                 {selectedScenarioChange && (
                   <div className="scenario-row">
-                    <dt>Scenario</dt>
+                    <dt>{finishDrag ? 'Live preview' : 'Scenario'}</dt>
                     <dd>{selectedTask.start} → {selectedTask.finish}</dd>
                   </div>
                 )}
@@ -272,6 +287,16 @@ export default function App() {
                 </div>
               </dl>
 
+              {baseSelectedTask.kind === 'task' && (
+                <div className="drag-instruction">
+                  <span className="drag-handle-swatch" />
+                  <div>
+                    <strong>Drag it in 3D</strong>
+                    <p>Use the gold handle at the task’s finish edge. Dates snap to weekdays and downstream impact updates while you move.</p>
+                  </div>
+                </div>
+              )}
+
               {baseSelectedTask.kind !== 'summary' && (
                 <form
                   className="scenario-editor"
@@ -281,8 +306,8 @@ export default function App() {
                   }}
                 >
                   <div>
-                    <p className="panel-label">What-if scenario</p>
-                    <strong>Change finish date</strong>
+                    <p className="panel-label">Exact-date fallback</p>
+                    <strong>Type a finish date</strong>
                   </div>
                   <label htmlFor="scenario-finish">Preview finish</label>
                   <input
@@ -290,13 +315,14 @@ export default function App() {
                     type="date"
                     value={scenarioFinish}
                     min={baseSelectedTask.kind === 'milestone' ? undefined : baseSelectedTask.start}
+                    disabled={Boolean(finishDrag)}
                     onChange={(event) => setScenarioFinish(event.target.value)}
                   />
                   <div className="quick-shifts" aria-label="Quick scenario shifts">
-                    <button type="button" onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 5))}>+5 workdays</button>
-                    <button type="button" onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 10))}>+10 workdays</button>
+                    <button type="button" disabled={Boolean(finishDrag)} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 5))}>+5 workdays</button>
+                    <button type="button" disabled={Boolean(finishDrag)} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 10))}>+10 workdays</button>
                   </div>
-                  <button type="submit" className="primary-action">Preview impact</button>
+                  <button type="submit" className="primary-action" disabled={Boolean(finishDrag)}>Preview impact</button>
                   {scenarioError && <p className="scenario-error" role="alert">{scenarioError}</p>}
                 </form>
               )}
@@ -304,23 +330,24 @@ export default function App() {
               <button
                 type="button"
                 className={analysisMode === 'drivers' ? 'secondary-action active' : 'secondary-action'}
+                disabled={Boolean(finishDrag)}
                 onClick={() => setAnalysisMode(analysisMode === 'drivers' ? 'normal' : 'drivers')}
               >
                 {analysisMode === 'drivers' ? 'Exit driver view' : 'Show what controls this'}
               </button>
 
               <div className="foundation-note">
-                <strong>Build 2 propagation rule</strong>
+                <strong>Build 3 direct manipulation</strong>
                 <p>
-                  Preview changes push successors only when the scenario exceeds existing schedule gap or adds delay beyond an already-existing relationship offset. Earlier finishes never pull the plan earlier.
+                  Dragging edits only the selected task’s finish along the time axis. Release keeps a reversible scenario preview; Apply commits it in memory and Reset discards it.
                 </p>
               </div>
             </>
           ) : (
             <div className="empty-inspector">
               <p className="panel-label">Inspector</p>
-              <h2>Select something</h2>
-              <p>Choose a task or milestone, then preview a finish-date change to watch the schedule impact propagate through the 3D world.</p>
+              <h2>Select a task</h2>
+              <p>Choose a normal task to reveal its finish handle, then drag the handle through time to preview schedule impact directly in the 3D world.</p>
             </div>
           )}
         </aside>
