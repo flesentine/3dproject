@@ -8,6 +8,7 @@ import {
   getWorkPackagesForWorkstream,
 } from './hierarchy/hierarchy'
 import { searchProject, type ProjectSearchResult } from './navigation/navigation'
+import { DirectManipulationLayer } from './scene/DirectManipulationLayer'
 import { ProjectWorld } from './scene/ProjectWorld'
 import { useProjectStore, type AnalysisMode } from './state/useProjectStore'
 import { TwinWorkspace, type TwinView } from './twin/TwinWorkspace'
@@ -35,6 +36,7 @@ export default function App() {
   const scenario = useProjectStore((state) => state.scenario)
   const scenarioError = useProjectStore((state) => state.scenarioError)
   const finishDrag = useProjectStore((state) => state.finishDrag)
+  const directDrag = useProjectStore((state) => state.directDrag)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const focusedWorkstreamId = useProjectStore((state) => state.focusedWorkstreamId)
   const focusedWorkPackageId = useProjectStore((state) => state.focusedWorkPackageId)
@@ -53,6 +55,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
 
+  const dragging = Boolean(finishDrag || directDrag)
   const displayProject = scenario?.project ?? project
   const baselineAnalysis = useMemo(() => scheduleEngine.analyze(project), [project])
   const analysis = scenario?.analysis ?? baselineAnalysis
@@ -127,21 +130,25 @@ export default function App() {
     setSearchQuery('')
   }
 
+  const scenarioRange = scenario
+    ? `${scenario.requestedStart} → ${scenario.requestedFinish}`
+    : ''
+
   return (
-    <main className={finishDrag ? 'app-shell dragging-finish' : 'app-shell'}>
+    <main className={dragging ? 'app-shell dragging-finish' : 'app-shell'}>
       <header className="topbar navigation-topbar">
         <div className="project-title-block">
-          <p className="eyebrow">BUILD 6 · 2D TWIN VIEW</p>
+          <p className="eyebrow">BUILD 8 · FULL DIRECT MANIPULATION</p>
           <h1>{project.name}</h1>
         </div>
 
         <div className="navigation-center">
           <nav className="breadcrumbs" aria-label="Project location">
-            <button type="button" onClick={goOverview} disabled={Boolean(finishDrag)}>{project.name}</button>
+            <button type="button" onClick={goOverview} disabled={dragging}>{project.name}</button>
             {selectedWorkstream && (
               <>
                 <span>/</span>
-                <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={Boolean(finishDrag)}>
+                <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={dragging}>
                   {selectedWorkstream.name}
                 </button>
               </>
@@ -149,7 +156,7 @@ export default function App() {
             {selectedWorkPackage && (
               <>
                 <span>/</span>
-                <button type="button" onClick={() => focusWorkPackage(selectedWorkPackage.id)} disabled={Boolean(finishDrag)}>
+                <button type="button" onClick={() => focusWorkPackage(selectedWorkPackage.id)} disabled={dragging}>
                   {selectedWorkPackage.name}
                 </button>
               </>
@@ -157,7 +164,7 @@ export default function App() {
             {selectedTask && (
               <>
                 <span>/</span>
-                <button type="button" onClick={() => focusTask(selectedTask.id)} disabled={Boolean(finishDrag)}>
+                <button type="button" onClick={() => focusTask(selectedTask.id)} disabled={dragging}>
                   {selectedTask.name}
                 </button>
               </>
@@ -169,7 +176,7 @@ export default function App() {
               type="search"
               placeholder="Search packages, tasks, milestones, owners…"
               value={searchQuery}
-              disabled={Boolean(finishDrag)}
+              disabled={dragging}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Escape') setSearchQuery('')
@@ -207,15 +214,15 @@ export default function App() {
                   type="button"
                   className={workspaceView === view ? 'active' : ''}
                   aria-pressed={workspaceView === view}
-                  disabled={Boolean(finishDrag)}
+                  disabled={dragging}
                   onClick={() => setWorkspaceView(view)}
                 >
                   {view === '3d' ? '3D' : view === 'table' ? 'Table' : 'Gantt'}
                 </button>
               ))}
             </div>
-            <button type="button" onClick={goOverview} disabled={Boolean(finishDrag)}>Overview</button>
-            <button type="button" className="today-button" onClick={goToday} disabled={Boolean(finishDrag)}>Today</button>
+            <button type="button" onClick={goOverview} disabled={dragging}>Overview</button>
+            <button type="button" className="today-button" onClick={goToday} disabled={dragging}>Today</button>
           </div>
         </div>
 
@@ -228,7 +235,8 @@ export default function App() {
           {selectedWorkPackage
             ? <span className="focus-stat">package · {selectedWorkPackage.name}</span>
             : selectedWorkstream && <span className="focus-stat">workstream · {selectedWorkstream.name}</span>}
-          {finishDrag && <span className="drag-stat">dragging → {finishDrag.finish}</span>}
+          {finishDrag && <span className="drag-stat">finish → {finishDrag.finish}</span>}
+          {directDrag && <span className="drag-stat">{directDrag.kind} · {directDrag.start} → {directDrag.finish}</span>}
           {scenario && <span className="scenario-stat">scenario · {scenario.changes.length} changed</span>}
         </div>
       </header>
@@ -252,7 +260,7 @@ export default function App() {
                 key={workstream.id}
                 className={focusedWorkstreamId === workstream.id ? 'workstream-button active' : 'workstream-button'}
                 onClick={() => focusWorkstream(workstream.id)}
-                disabled={Boolean(finishDrag)}
+                disabled={dragging}
               >
                 <span>{workstream.name}</span>
                 <small>{taskCountByWorkstream.get(workstream.id) ?? 0}</small>
@@ -265,7 +273,7 @@ export default function App() {
               <div className="workstream-nav-heading">
                 <span className="control-title">Work packages</span>
                 {selectedWorkPackage && (
-                  <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={Boolean(finishDrag)}>Up</button>
+                  <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={dragging}>Up</button>
                 )}
               </div>
               {visibleWorkPackages.map((workPackage) => (
@@ -274,7 +282,7 @@ export default function App() {
                   key={workPackage.id}
                   className={focusedWorkPackageId === workPackage.id ? 'package-button active' : 'package-button'}
                   onClick={() => focusWorkPackage(workPackage.id)}
-                  disabled={Boolean(finishDrag)}
+                  disabled={dragging}
                 >
                   <span>{workPackage.name}</span>
                   <small>{taskCountByWorkPackage.get(workPackage.id) ?? 0} activities</small>
@@ -287,11 +295,11 @@ export default function App() {
             <span className="control-title">{workspaceView === '3d' ? 'In the world' : 'In the 2D twin'}</span>
             {workspaceView === '3d' ? (
               <>
-                <strong>Double-click = dive in</strong>
-                <span>Lane / label → workstream</span>
-                <span>Package volume / label → work package</span>
-                <span>Task → activity</span>
-                <span>Breadcrumb → one level back out</span>
+                <strong>Select a task = edit handles</strong>
+                <span>Blue START → resize start edge</span>
+                <span>Purple MOVE → shift whole task</span>
+                <span>Gold FINISH → resize finish edge</span>
+                <span>Double-click → dive in</span>
               </>
             ) : (
               <>
@@ -313,7 +321,7 @@ export default function App() {
                   type="button"
                   className={analysisMode === mode.id ? 'mode-button active' : 'mode-button'}
                   aria-pressed={analysisMode === mode.id}
-                  disabled={Boolean(finishDrag) || (mode.id === 'drivers' && !selectedTask)}
+                  disabled={dragging || (mode.id === 'drivers' && !selectedTask)}
                   onClick={() => setAnalysisMode(mode.id)}
                 >
                   {mode.label}
@@ -333,17 +341,17 @@ export default function App() {
             <section className="scenario-summary" aria-label="Active scenario summary">
               <div className="scenario-summary-heading">
                 <span className="scenario-dot" />
-                <strong>{finishDrag ? 'Live drag preview' : 'Scenario active'}</strong>
+                <strong>{dragging ? 'Live drag preview' : `${scenario.editKind} scenario active`}</strong>
               </div>
-              <p>{scenarioSource?.name ?? 'Selected activity'} → {scenario.requestedFinish}</p>
+              <p>{scenarioSource?.name ?? 'Selected activity'} · {scenarioRange}</p>
               <dl className="scenario-impact-list">
                 <div><dt>Affected</dt><dd>{scenario.changes.length} activities</dd></div>
                 <div><dt>Plan finish</dt><dd>{baselineAnalysis.dateRange.finish}</dd></div>
                 <div><dt>Preview finish</dt><dd>{analysis.dateRange.finish}</dd></div>
               </dl>
               <div className="scenario-actions">
-                <button type="button" className="apply-button" onClick={applyScenario} disabled={Boolean(finishDrag)}>Apply</button>
-                <button type="button" className="reset-button" onClick={resetScenario} disabled={Boolean(finishDrag)}>Reset</button>
+                <button type="button" className="apply-button" onClick={applyScenario} disabled={dragging}>Apply</button>
+                <button type="button" className="reset-button" onClick={resetScenario} disabled={dragging}>Reset</button>
               </div>
             </section>
           )}
@@ -363,7 +371,7 @@ export default function App() {
                 dpr={[1, 1.75]}
                 gl={{ antialias: true, alpha: false }}
                 onPointerMissed={() => {
-                  if (!finishDrag) selectTask(null)
+                  if (!dragging) selectTask(null)
                 }}
               >
                 <color attach="background" args={['#080d13']} />
@@ -375,13 +383,19 @@ export default function App() {
                   baselineProject={scenario ? project : undefined}
                   scenarioChanges={scenario?.changes}
                 />
+                <DirectManipulationLayer />
               </Canvas>
               <div className="viewport-mode" aria-live="polite">
                 {selectedWorkPackage
                   ? <span className="package-mode-chip">Package · {selectedWorkPackage.name}</span>
                   : selectedWorkstream && <span className="focus-mode-chip">Workstream · {selectedWorkstream.name}</span>}
                 {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
-                {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
+                {directDrag && (
+                  <span className="drag-mode-chip">
+                    {directDrag.kind === 'start' ? 'Dragging start' : 'Moving task'} · {directDrag.start} → {directDrag.finish}
+                  </span>
+                )}
+                {!dragging && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
                 {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
                 {analysisMode === 'drivers' && selectedTask && <span className="driver-mode-chip">Drivers → {selectedTask.name}</span>}
               </div>
@@ -414,7 +428,7 @@ export default function App() {
             <>
               <div className="inspector-heading">
                 <p className="panel-label">Selected activity</p>
-                <button type="button" className="quiet-button" onClick={() => selectTask(null)} aria-label="Clear selected activity" disabled={Boolean(finishDrag)}>
+                <button type="button" className="quiet-button" onClick={() => selectTask(null)} aria-label="Clear selected activity" disabled={dragging}>
                   Clear
                 </button>
               </div>
@@ -424,14 +438,14 @@ export default function App() {
                 {selectedTaskWorkPackage && <span className="hierarchy-badge">{selectedTaskWorkPackage.name}</span>}
                 {selectedMetrics?.isCritical && <span className="critical-badge">Critical</span>}
                 {selectedScenarioChange && <span className="scenario-badge">Scenario moved</span>}
-                {finishDrag?.taskId === selectedTask.id && <span className="drag-badge">Dragging</span>}
+                {(finishDrag?.taskId === selectedTask.id || directDrag?.taskId === selectedTask.id) && <span className="drag-badge">Dragging</span>}
               </div>
 
               <button
                 type="button"
                 className="focus-camera-action"
                 onClick={() => focusTask(selectedTask.id)}
-                disabled={Boolean(finishDrag)}
+                disabled={dragging}
               >
                 {workspaceView === '3d' ? 'Dive to this activity' : 'Focus hierarchy on this activity'}
               </button>
@@ -440,7 +454,7 @@ export default function App() {
                 <div><dt>Committed</dt><dd>{baseSelectedTask.start} → {baseSelectedTask.finish}</dd></div>
                 {selectedScenarioChange && (
                   <div className="scenario-row">
-                    <dt>{finishDrag ? 'Live preview' : 'Scenario'}</dt>
+                    <dt>{dragging ? 'Live preview' : 'Scenario'}</dt>
                     <dd>{selectedTask.start} → {selectedTask.finish}</dd>
                   </div>
                 )}
@@ -461,8 +475,8 @@ export default function App() {
                 <div className="drag-instruction">
                   <span className="drag-handle-swatch" />
                   <div>
-                    <strong>Drag it in 3D</strong>
-                    <p>Use the gold handle at the task’s finish edge. Dates snap to weekdays and downstream impact updates while you move.</p>
+                    <strong>Three direct schedule gestures</strong>
+                    <p>Blue START resizes the start edge, purple MOVE shifts the whole task without changing duration, and gold FINISH resizes the finish edge. All snap to weekdays and preview downstream impact live.</p>
                   </div>
                 </div>
               )}
@@ -485,14 +499,14 @@ export default function App() {
                     type="date"
                     value={scenarioFinish}
                     min={baseSelectedTask.kind === 'milestone' ? undefined : baseSelectedTask.start}
-                    disabled={Boolean(finishDrag)}
+                    disabled={dragging}
                     onChange={(event) => setScenarioFinish(event.target.value)}
                   />
                   <div className="quick-shifts" aria-label="Quick scenario shifts">
-                    <button type="button" disabled={Boolean(finishDrag)} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 5))}>+5 workdays</button>
-                    <button type="button" disabled={Boolean(finishDrag)} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 10))}>+10 workdays</button>
+                    <button type="button" disabled={dragging} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 5))}>+5 workdays</button>
+                    <button type="button" disabled={dragging} onClick={() => previewScenario(addWorkingDays(baseSelectedTask.finish, 10))}>+10 workdays</button>
                   </div>
-                  <button type="submit" className="primary-action" disabled={Boolean(finishDrag)}>Preview impact</button>
+                  <button type="submit" className="primary-action" disabled={dragging}>Preview impact</button>
                   {scenarioError && <p className="scenario-error" role="alert">{scenarioError}</p>}
                 </form>
               )}
@@ -500,16 +514,16 @@ export default function App() {
               <button
                 type="button"
                 className={analysisMode === 'drivers' ? 'secondary-action active' : 'secondary-action'}
-                disabled={Boolean(finishDrag)}
+                disabled={dragging}
                 onClick={() => setAnalysisMode(analysisMode === 'drivers' ? 'normal' : 'drivers')}
               >
                 {analysisMode === 'drivers' ? 'Exit driver view' : 'Show what controls this'}
               </button>
 
               <div className="foundation-note">
-                <strong>Build 6 twin rule</strong>
+                <strong>Build 8 manipulation rule</strong>
                 <p>
-                  3D, Table, and Gantt are three views of one live project model. Selection, hierarchy, CPM, drivers, scenarios, and committed dates stay synchronized across all three.
+                  Start, finish, and whole-task edits are temporary scenarios until Apply. The source activity changes directly; only downstream activities propagate, and earlier edits never pull successors earlier automatically.
                 </p>
               </div>
             </>
