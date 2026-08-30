@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { HistoryScenarioPanelPortal } from './history/HistoryScenarioPanelPortal'
 import { ProjectMiniMapPortal } from './orientation/ProjectMiniMapPortal'
 import './styles.css'
 import './scenario.css'
@@ -9,6 +10,7 @@ import './navigation.css'
 import './hierarchy.css'
 import './twin.css'
 import './orientation.css'
+import './history.css'
 
 const root = document.getElementById('root')
 
@@ -20,5 +22,6 @@ createRoot(root).render(
   <StrictMode>
     <App />
     <ProjectMiniMapPortal />
+    <HistoryScenarioPanelPortal />
   </StrictMode>,
 )
