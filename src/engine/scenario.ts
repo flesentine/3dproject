@@ -74,6 +74,26 @@ function workingDayDistance(from: ISODate, to: ISODate): number {
   return distance
 }
 
+function candidateStartFromRelationship(
+  dependency: Dependency,
+  basePredecessor: ProjectTask,
+  scenarioPredecessor: ProjectTask,
+  originalSuccessor: ProjectTask,
+  successorSpan: number,
+): ISODate {
+  const baseConstraint = requiredSuccessorStart(dependency, basePredecessor, successorSpan)
+  const scenarioConstraint = requiredSuccessorStart(dependency, scenarioPredecessor, successorSpan)
+
+  if (compareISODate(baseConstraint, originalSuccessor.start) <= 0) {
+    return compareISODate(scenarioConstraint, originalSuccessor.start) > 0
+      ? scenarioConstraint
+      : originalSuccessor.start
+  }
+
+  const incrementalShift = Math.max(0, workingDayDistance(baseConstraint, scenarioConstraint))
+  return addWorkingDays(originalSuccessor.start, incrementalShift)
+}
+
 function buildChanges(base: ProjectModel, scenario: ProjectModel, sourceTaskId: string): ScenarioTaskChange[] {
   const scenarioById = new Map(scenario.tasks.map((task) => [task.id, task]))
 
@@ -155,17 +175,24 @@ export function simulateFinishChange(
     if (!successor || !originalSuccessor || successor.kind === 'summary') continue
 
     const span = taskSpan(originalSuccessor)
-    let requiredStart = successor.start
+    let requiredStart = originalSuccessor.start
 
     for (const dependency of incomingByTask.get(successorId) ?? []) {
-      const predecessor = scenarioTaskById.get(dependency.fromTaskId)
-      if (!predecessor) continue
+      const basePredecessor = baseTaskById.get(dependency.fromTaskId)
+      const scenarioPredecessor = scenarioTaskById.get(dependency.fromTaskId)
+      if (!basePredecessor || !scenarioPredecessor) continue
 
-      const constraint = requiredSuccessorStart(dependency, predecessor, span)
-      if (compareISODate(constraint, requiredStart) > 0) requiredStart = constraint
+      const candidate = candidateStartFromRelationship(
+        dependency,
+        basePredecessor,
+        scenarioPredecessor,
+        originalSuccessor,
+        span,
+      )
+      if (compareISODate(candidate, requiredStart) > 0) requiredStart = candidate
     }
 
-    if (compareISODate(requiredStart, successor.start) <= 0) continue
+    if (compareISODate(requiredStart, originalSuccessor.start) <= 0) continue
 
     successor.start = requiredStart
     successor.finish = span === 0 ? requiredStart : addWorkingDays(requiredStart, span)
