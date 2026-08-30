@@ -227,7 +227,7 @@ function TaskBlock({
                 anchorY="middle"
                 maxWidth={2.7}
               >
-                {activelyDragging ? finishDrag.finish : 'DRAG FINISH'}
+                {activelyDragging ? (finishDrag?.finish ?? task.finish) : 'DRAG FINISH'}
               </Text>
             )}
           </group>
@@ -385,7 +385,7 @@ function FinishDragSurface({ layout }: { layout: ReturnType<typeof buildWorldLay
     const finish = finishDateFromWorldZ(
       committedProject.statusDate,
       task.start,
-      finishDrag.originalFinish,
+      finishDrag.finish,
       event.point.z,
     )
     updateFinishDrag(task.id, finish)
@@ -431,9 +431,10 @@ export function ProjectWorld({
 
   const worldCenterZ = (layout.startZ + layout.finishZ) / 2
   const worldDepth = Math.max(40, layout.finishZ - layout.startZ + 12)
+  const draggingFinish = Boolean(finishDrag)
 
   useEffect(() => {
-    if (!finishDrag) return
+    if (!draggingFinish) return
 
     const previousCursor = document.body.style.cursor
     document.body.style.cursor = 'col-resize'
@@ -446,14 +447,14 @@ export function ProjectWorld({
       window.removeEventListener('blur', finish)
       document.body.style.cursor = previousCursor
     }
-  }, [finishDrag, endFinishDrag])
+  }, [draggingFinish, endFinishDrag])
 
   return (
     <>
       <PerspectiveCamera makeDefault position={[18, 14, -11]} fov={48} />
       <OrbitControls
         makeDefault
-        enabled={!finishDrag}
+        enabled={!draggingFinish}
         target={[0, 0.8, worldCenterZ * 0.55]}
         minDistance={6}
         maxDistance={85}
