@@ -18,7 +18,7 @@ describe('2D twin view model', () => {
   })
 
   it('respects work-package semantic focus in normal mode', () => {
-    const packageId = 'embedded-sensor-release'
+    const packageId = 'embedded-release'
     const rows = buildTwinRows(auroraProject, analysis, {
       analysisMode: 'normal',
       focusedWorkstreamId: 'embedded',
@@ -34,7 +34,7 @@ describe('2D twin view model', () => {
     const rows = buildTwinRows(auroraProject, analysis, {
       analysisMode: 'critical',
       focusedWorkstreamId: 'cloud',
-      focusedWorkPackageId: 'cloud-runtime',
+      focusedWorkPackageId: 'cloud-services',
       driverTaskIds: [],
     })
 
