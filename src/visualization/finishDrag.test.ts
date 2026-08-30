@@ -22,6 +22,11 @@ describe('finish-drag spatial mapping', () => {
     expect(finishDateFromWorldZ('2026-08-29', '2026-08-31', '2026-09-11', sundayZ)).toBe('2026-09-04')
   })
 
+  it('uses the current snapped finish when reversing across a weekend', () => {
+    const sundayZ = finishEdgeZ('2026-08-29', '2026-09-13')
+    expect(finishDateFromWorldZ('2026-08-29', '2026-08-31', '2026-09-14', sundayZ)).toBe('2026-09-11')
+  })
+
   it('never allows a task finish before its start', () => {
     const tooEarlyZ = finishEdgeZ('2026-08-29', '2026-08-20')
     expect(finishDateFromWorldZ('2026-08-29', '2026-09-01', '2026-09-04', tooEarlyZ)).toBe('2026-09-01')
