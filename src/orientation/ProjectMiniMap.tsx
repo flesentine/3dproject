@@ -44,7 +44,7 @@ export function ProjectMiniMap({
       <div className="project-minimap-header">
         <div>
           <span>Project map</span>
-          <small>past → future</small>
+          <small>Build 7 · past → future</small>
         </div>
         <button type="button" onClick={onOverview} disabled={disabled}>Overview</button>
       </div>
@@ -141,17 +141,12 @@ export function ProjectMiniMap({
               style={{ left: `${model.camera.xPercent}%`, top: `${model.camera.yPercent}%` }}
               aria-hidden="true"
             />
-            <div
-              className="project-minimap-camera-position"
-              style={{ left: `${model.camera.position.xPercent}%`, top: `${model.camera.position.yPercent}%` }}
-              aria-hidden="true"
-            />
           </>
         )}
       </div>
 
       <div className="project-minimap-legend" aria-hidden="true">
-        <span><i className="camera-key" />camera</span>
+        <span><i className="camera-key" />camera focus</span>
         <span><i className="milestone-key" />milestone</span>
       </div>
     </aside>
