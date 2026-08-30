@@ -38,7 +38,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
       const result = simulateFinishChange(state.project, taskId, finish)
       return result.ok
         ? { scenario: result.scenario, scenarioError: null }
-        : { scenario: null, scenarioError: result.message }
+        : { scenarioError: result.message }
     }),
   applyScenario: () =>
     set((state) => state.scenario
