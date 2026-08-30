@@ -1,5 +1,5 @@
 import { Line, Text } from '@react-three/drei'
-import { useThree, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { DoubleSide } from 'three'
 import { useProjectStore } from '../state/useProjectStore'
@@ -38,6 +38,10 @@ export function DirectManipulationLayer() {
       controls.enabled = previous
     }
   }, [controls, dragging])
+
+  useFrame(() => {
+    if (dragging && controls) controls.enabled = false
+  })
 
   useEffect(() => {
     if (!dragging) return
