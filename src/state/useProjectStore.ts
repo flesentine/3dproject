@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { auroraProject } from '../data/aurora'
 import type { ISODate, ProjectModel, ScheduleScenario } from '../domain/project'
 import { simulateFinishChange } from '../engine/scenario'
+import type { NavigationKind, NavigationRequest } from '../navigation/navigation'
 
 export type AnalysisMode = 'normal' | 'critical' | 'drivers'
 
@@ -17,9 +18,15 @@ interface ProjectState {
   scenarioError: string | null
   finishDrag: FinishDragState | null
   selectedTaskId: string | null
+  focusedWorkstreamId: string | null
+  navigationRequest: NavigationRequest
   analysisMode: AnalysisMode
   selectTask: (taskId: string | null) => void
   setAnalysisMode: (mode: AnalysisMode) => void
+  focusTask: (taskId: string) => void
+  focusWorkstream: (workstreamId: string) => void
+  goToday: () => void
+  goOverview: () => void
   previewFinishScenario: (taskId: string, finish: ISODate) => void
   beginFinishDrag: (taskId: string) => void
   updateFinishDrag: (taskId: string, finish: ISODate) => void
@@ -28,12 +35,26 @@ interface ProjectState {
   resetScenario: () => void
 }
 
+function nextNavigation(
+  state: Pick<ProjectState, 'navigationRequest'>,
+  kind: NavigationKind,
+  targetId?: string,
+): NavigationRequest {
+  return {
+    id: state.navigationRequest.id + 1,
+    kind,
+    targetId,
+  }
+}
+
 export const useProjectStore = create<ProjectState>((set) => ({
   project: auroraProject,
   scenario: null,
   scenarioError: null,
   finishDrag: null,
   selectedTaskId: null,
+  focusedWorkstreamId: null,
+  navigationRequest: { id: 0, kind: 'overview' },
   analysisMode: 'normal',
   selectTask: (selectedTaskId) =>
     set((state) => ({
@@ -43,6 +64,46 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setAnalysisMode: (analysisMode) =>
     set((state) => ({
       analysisMode: analysisMode === 'drivers' && !state.selectedTaskId ? 'normal' : analysisMode,
+    })),
+  focusTask: (taskId) =>
+    set((state) => {
+      const task = (state.scenario?.project ?? state.project).tasks.find((candidate) => candidate.id === taskId)
+      if (!task) return state
+      return {
+        selectedTaskId: taskId,
+        focusedWorkstreamId: task.workstreamId,
+        navigationRequest: nextNavigation(state, 'task', taskId),
+      }
+    }),
+  focusWorkstream: (workstreamId) =>
+    set((state) => {
+      if (!state.project.workstreams.some((workstream) => workstream.id === workstreamId)) return state
+      const selectedTask = (state.scenario?.project ?? state.project).tasks.find(
+        (task) => task.id === state.selectedTaskId,
+      )
+      return {
+        focusedWorkstreamId: workstreamId,
+        selectedTaskId: selectedTask?.workstreamId === workstreamId ? state.selectedTaskId : null,
+        analysisMode:
+          selectedTask?.workstreamId === workstreamId || state.analysisMode !== 'drivers'
+            ? state.analysisMode
+            : 'normal',
+        navigationRequest: nextNavigation(state, 'workstream', workstreamId),
+      }
+    }),
+  goToday: () =>
+    set((state) => ({
+      focusedWorkstreamId: null,
+      selectedTaskId: null,
+      analysisMode: state.analysisMode === 'drivers' ? 'normal' : state.analysisMode,
+      navigationRequest: nextNavigation(state, 'today'),
+    })),
+  goOverview: () =>
+    set((state) => ({
+      focusedWorkstreamId: null,
+      selectedTaskId: null,
+      analysisMode: state.analysisMode === 'drivers' ? 'normal' : state.analysisMode,
+      navigationRequest: nextNavigation(state, 'overview'),
     })),
   previewFinishScenario: (taskId, finish) =>
     set((state) => {
@@ -58,6 +119,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
       return {
         selectedTaskId: taskId,
+        focusedWorkstreamId: task.workstreamId,
         analysisMode: 'normal',
         scenarioError: null,
         finishDrag: {
