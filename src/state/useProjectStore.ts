@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { auroraProject } from '../data/aurora'
 import type { ISODate, ProjectModel, ScheduleScenario } from '../domain/project'
-import { simulateFinishChange } from '../engine/scenario'
+import { simulateFinishChange, simulateTaskEdit } from '../engine/scenario'
 import { getWorkPackage } from '../hierarchy/hierarchy'
 import type { NavigationKind, NavigationRequest } from '../navigation/navigation'
 
 export type AnalysisMode = 'normal' | 'critical' | 'drivers'
+export type DirectDragKind = 'start' | 'shift'
 
 export interface FinishDragState {
   taskId: string
@@ -13,11 +14,22 @@ export interface FinishDragState {
   finish: ISODate
 }
 
+export interface DirectDragState {
+  taskId: string
+  kind: DirectDragKind
+  originalStart: ISODate
+  originalFinish: ISODate
+  start: ISODate
+  finish: ISODate
+  anchorWorldZ: number
+}
+
 interface ProjectState {
   project: ProjectModel
   scenario: ScheduleScenario | null
   scenarioError: string | null
   finishDrag: FinishDragState | null
+  directDrag: DirectDragState | null
   selectedTaskId: string | null
   focusedWorkstreamId: string | null
   focusedWorkPackageId: string | null
@@ -34,6 +46,9 @@ interface ProjectState {
   beginFinishDrag: (taskId: string) => void
   updateFinishDrag: (taskId: string, finish: ISODate) => void
   endFinishDrag: () => void
+  beginDirectDrag: (taskId: string, kind: DirectDragKind, anchorWorldZ: number) => void
+  updateDirectDrag: (taskId: string, start: ISODate, finish: ISODate) => void
+  endDirectDrag: () => void
   applyScenario: () => void
   resetScenario: () => void
 }
@@ -55,6 +70,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   scenario: null,
   scenarioError: null,
   finishDrag: null,
+  directDrag: null,
   selectedTaskId: null,
   focusedWorkstreamId: null,
   focusedWorkPackageId: null,
@@ -123,8 +139,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
     set((state) => {
       const result = simulateFinishChange(state.project, taskId, finish)
       return result.ok
-        ? { scenario: result.scenario, scenarioError: null, finishDrag: null }
-        : { scenarioError: result.message, finishDrag: null }
+        ? { scenario: result.scenario, scenarioError: null, finishDrag: null, directDrag: null }
+        : { scenarioError: result.message, finishDrag: null, directDrag: null }
     }),
   beginFinishDrag: (taskId) =>
     set((state) => {
@@ -137,6 +153,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         focusedWorkPackageId: task.workPackageId ?? null,
         analysisMode: 'normal',
         scenarioError: null,
+        directDrag: null,
         finishDrag: {
           taskId,
           originalFinish: task.finish,
@@ -165,6 +182,60 @@ export const useProjectStore = create<ProjectState>((set) => ({
       }
     }),
   endFinishDrag: () => set({ finishDrag: null }),
+  beginDirectDrag: (taskId, kind, anchorWorldZ) =>
+    set((state) => {
+      const task = state.project.tasks.find((candidate) => candidate.id === taskId)
+      if (!task || task.kind !== 'task') return state
+
+      const previewTask = state.scenario?.sourceTaskId === taskId
+        ? state.scenario.project.tasks.find((candidate) => candidate.id === taskId) ?? task
+        : task
+
+      return {
+        selectedTaskId: taskId,
+        focusedWorkstreamId: task.workstreamId,
+        focusedWorkPackageId: task.workPackageId ?? null,
+        analysisMode: 'normal',
+        scenarioError: null,
+        finishDrag: null,
+        directDrag: {
+          taskId,
+          kind,
+          originalStart: task.start,
+          originalFinish: task.finish,
+          start: previewTask.start,
+          finish: previewTask.finish,
+          anchorWorldZ,
+        },
+      }
+    }),
+  updateDirectDrag: (taskId, start, finish) =>
+    set((state) => {
+      const drag = state.directDrag
+      if (!drag || drag.taskId !== taskId || (drag.start === start && drag.finish === finish)) return state
+
+      const result = simulateTaskEdit(
+        state.project,
+        taskId,
+        drag.kind === 'start'
+          ? { kind: 'start', start }
+          : { kind: 'shift', start, finish },
+      )
+
+      if (!result.ok) {
+        return {
+          scenarioError: result.message,
+          directDrag: { ...drag, start, finish },
+        }
+      }
+
+      return {
+        scenario: result.scenario,
+        scenarioError: null,
+        directDrag: { ...drag, start, finish },
+      }
+    }),
+  endDirectDrag: () => set({ directDrag: null }),
   applyScenario: () =>
     set((state) => state.scenario
       ? {
@@ -172,7 +243,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
           scenario: null,
           scenarioError: null,
           finishDrag: null,
+          directDrag: null,
         }
-      : { finishDrag: null }),
-  resetScenario: () => set({ scenario: null, scenarioError: null, finishDrag: null }),
+      : { finishDrag: null, directDrag: null }),
+  resetScenario: () => set({ scenario: null, scenarioError: null, finishDrag: null, directDrag: null }),
 }))
