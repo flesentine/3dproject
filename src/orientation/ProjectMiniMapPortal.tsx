@@ -18,6 +18,7 @@ export function ProjectMiniMapPortal() {
   const project = useProjectStore((state) => state.project)
   const scenario = useProjectStore((state) => state.scenario)
   const finishDrag = useProjectStore((state) => state.finishDrag)
+  const directDrag = useProjectStore((state) => state.directDrag)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const focusedWorkstreamId = useProjectStore((state) => state.focusedWorkstreamId)
   const focusedWorkPackageId = useProjectStore((state) => state.focusedWorkPackageId)
@@ -98,7 +99,7 @@ export function ProjectMiniMapPortal() {
       focusedWorkstreamId={focusedWorkstreamId}
       focusedWorkPackageId={focusedWorkPackageId}
       selectedTaskId={selectedTaskId}
-      disabled={Boolean(finishDrag)}
+      disabled={Boolean(finishDrag || directDrag)}
       onFocusWorkstream={focusWorkstream}
       onFocusTask={focusTask}
       onToday={goToday}
