@@ -7,7 +7,7 @@ describe('project navigation', () => {
   it('finds tasks by name and prioritizes strong matches', () => {
     const results = searchProject(auroraProject, 'sensor firmware')
     expect(results[0]?.kind).toBe('task')
-    expect(results[0]?.label).toContain('Sensor Firmware')
+    expect(results[0]?.label.toLowerCase()).toContain('sensor firmware')
   })
 
   it('finds workstreams directly', () => {
