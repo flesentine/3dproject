@@ -87,3 +87,26 @@ export interface ScheduleAnalysis {
   criticalDependencyIds: string[]
   networkSpanWorkdays: number
 }
+
+export interface ScenarioTaskChange {
+  taskId: string
+  originalStart: ISODate
+  originalFinish: ISODate
+  scenarioStart: ISODate
+  scenarioFinish: ISODate
+  startShiftWorkdays: number
+  finishShiftWorkdays: number
+  isSourceEdit: boolean
+}
+
+export interface ScheduleScenario {
+  sourceTaskId: string
+  requestedFinish: ISODate
+  project: ProjectModel
+  analysis: ScheduleAnalysis
+  changes: ScenarioTaskChange[]
+}
+
+export type ScenarioResult =
+  | { ok: true; scenario: ScheduleScenario }
+  | { ok: false; message: string }
