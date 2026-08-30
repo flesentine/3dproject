@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 5 — Hierarchical Semantic Zoom is complete.**
+**Build 6 — 2D Twin View is complete.**
 
-The app now combines CPM/driver analysis, reversible scenario propagation, direct 3D finish manipulation, animated navigation, and a real hierarchy: **Project → Workstream → Work Package → Task**. Work-package volumes appear only after entering a workstream, package focus reveals its member activities, and breadcrumbs let the user back out without changing the project's stable spatial geography.
+The app now has three synchronized project surfaces: **3D, Table, and Gantt**. All three read the same project model, schedule analysis, hierarchy focus, selection, and scenario state. A user can inspect a task conventionally, simulate a change, then return to the 3D causal world without losing context or creating a second copy of the schedule.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -17,6 +17,7 @@ The app now combines CPM/driver analysis, reversible scenario propagation, direc
 - Build 3 direct manipulation: [`docs/BUILD_3.md`](docs/BUILD_3.md)
 - Build 4 navigation and semantic zoom: [`docs/BUILD_4.md`](docs/BUILD_4.md)
 - Build 5 hierarchical semantic zoom: [`docs/BUILD_5.md`](docs/BUILD_5.md)
+- Build 6 2D twin view: [`docs/BUILD_6.md`](docs/BUILD_6.md)
 
 ## Product rule
 
@@ -40,6 +41,18 @@ npm run build
 
 ## Current capabilities
 
+### Synchronized project surfaces
+
+- **3D** spatial schedule and causal simulation view
+- **Table** for dense schedule inspection
+- **Gantt** for conventional calendar/time reading
+- One shared `ProjectModel` across all renderers
+- One shared CPM/driver analysis across all renderers
+- Shared selected activity and hierarchy focus
+- Shared scenario preview, Apply, and Reset state
+- Normal mode respects the same hierarchy boundary in every view
+- Critical Path and Drivers cut across hierarchy consistently in every view
+
 ### Spatial schedule
 
 - Structured 3D schedule world
@@ -49,7 +62,7 @@ npm run build
 - Progress fill
 - Milestone beacons
 - Orbit and zoom navigation
-- Click selection and 2D inspector
+- Click selection and shared inspector
 - Stable geography across analysis modes, hierarchy focus, and scenario changes
 - Animated task movement when scenario dates change
 - Wireframe ghosts for committed positions
@@ -58,6 +71,30 @@ npm run build
 - Live snapped finish-date label while dragging
 - Camera orbit lock during direct manipulation
 - Translucent work-package volumes revealed at workstream level
+
+### 2D Table
+
+- Activity, hierarchy, start, finish, duration, progress, float, and owner columns
+- Selected-row synchronization with the shared inspector
+- Critical and driver treatments
+- Scenario-moved treatment
+- Committed finish shown when a scenario moves an activity
+- Progress visualization
+- Click to select
+- Double-click to synchronize hierarchy focus to the activity
+
+### 2D Gantt
+
+- Calendar timeline with weekly ticks
+- Today marker
+- Task bars and milestone diamonds
+- Progress fill
+- Critical and driver treatments
+- Scenario-moved treatment
+- Committed-position ghost during scenario preview
+- Persistent task baselines when baseline dates exist
+- Click to select
+- Double-click to synchronize hierarchy focus to the activity
 
 ### Hierarchy and navigation
 
@@ -71,13 +108,10 @@ npm run build
 - Breadcrumb location through all four hierarchy levels
 - Left-panel workstream navigator
 - Contextual work-package navigator after entering a workstream
-- Double-click task to focus and fly to it
+- Double-click task to focus and fly to it in 3D
 - Double-click lane/workstream label to enter that workstream
 - Double-click work-package volume/label to enter that package
-- Double-click Today plane to return home
 - Semantic focus without geometry rearrangement
-- Package-member task labels expand at deeper levels
-- Inspector **Dive to this activity** action
 
 ### Schedule analysis
 
@@ -97,31 +131,31 @@ npm run build
 ### Scenario simulation
 
 - Finish-date what-if preview for tasks and milestones
-- Direct finish dragging for normal tasks
+- Direct finish dragging for normal tasks in 3D
 - +5 / +10 workday quick scenarios
-- Exact-date fallback editor
+- Shared exact-date scenario editor
 - Conservative downstream propagation
 - Existing schedule gap can absorb a delay
 - Existing baseline relationship offsets are preserved instead of silently repaired
 - Earlier finishes do not pull successors earlier
 - Scenario-aware CPM, float, critical path, and driver analysis
-- Committed versus scenario dates in the inspector
+- Committed versus scenario dates in the inspector and 2D views
 - **Apply** to commit the in-memory preview
 - **Reset** to discard it completely
 
 ### Analysis views
 
 - **Normal** — semantic hierarchy focus plus immediate selected-task dependency context
-- **Critical Path** — fades non-critical work and can cut across the current hierarchy level
-- **Drivers** — exposes the controlling chain even when it crosses workstreams or work packages
+- **Critical Path** — isolates critical work across hierarchy in 3D, Table, and Gantt
+- **Drivers** — exposes the controlling chain across hierarchy in 3D, Table, and Gantt
 
 ## Initial V0.1 direction
 
 - Start-edge and whole-task schedule manipulation
 - Mini-map / project orientation aid
 - Keyboard navigation shortcuts and optional free-flight mode
-- Simple 2D task table using the same project engine
 - Named scenario branches and richer undo/redo
+- Gantt drag editing only through the existing scenario engine
 - Richer recursive hierarchy below work package only if the current semantic model proves useful
 - Later project/resource calendars and holidays
 - Import/export and persistence
