@@ -5,6 +5,7 @@ import './styles.css'
 import './scenario.css'
 import './directManipulation.css'
 import './navigation.css'
+import './hierarchy.css'
 
 const root = document.getElementById('root')
 
