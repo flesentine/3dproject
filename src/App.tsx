@@ -10,6 +10,7 @@ import {
 import { searchProject, type ProjectSearchResult } from './navigation/navigation'
 import { ProjectWorld } from './scene/ProjectWorld'
 import { useProjectStore, type AnalysisMode } from './state/useProjectStore'
+import { TwinWorkspace, type TwinView } from './twin/TwinWorkspace'
 
 function formatProgress(progress: number) {
   return `${Math.round(progress * 100)}%`
@@ -26,6 +27,8 @@ const modes: { id: AnalysisMode; label: string }[] = [
   { id: 'critical', label: 'Critical path' },
   { id: 'drivers', label: 'Drivers' },
 ]
+
+type WorkspaceView = '3d' | TwinView
 
 export default function App() {
   const project = useProjectStore((state) => state.project)
@@ -48,6 +51,7 @@ export default function App() {
   const resetScenario = useProjectStore((state) => state.resetScenario)
   const [scenarioFinish, setScenarioFinish] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
 
   const displayProject = scenario?.project ?? project
   const baselineAnalysis = useMemo(() => scheduleEngine.analyze(project), [project])
@@ -127,7 +131,7 @@ export default function App() {
     <main className={finishDrag ? 'app-shell dragging-finish' : 'app-shell'}>
       <header className="topbar navigation-topbar">
         <div className="project-title-block">
-          <p className="eyebrow">BUILD 5 · HIERARCHICAL SEMANTIC ZOOM</p>
+          <p className="eyebrow">BUILD 6 · 2D TWIN VIEW</p>
           <h1>{project.name}</h1>
         </div>
 
@@ -196,6 +200,20 @@ export default function App() {
           </div>
 
           <div className="navigation-actions">
+            <div className="view-switch" aria-label="Workspace view">
+              {(['3d', 'table', 'gantt'] as WorkspaceView[]).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  className={workspaceView === view ? 'active' : ''}
+                  aria-pressed={workspaceView === view}
+                  disabled={Boolean(finishDrag)}
+                  onClick={() => setWorkspaceView(view)}
+                >
+                  {view === '3d' ? '3D' : view === 'table' ? 'Table' : 'Gantt'}
+                </button>
+              ))}
+            </div>
             <button type="button" onClick={goOverview} disabled={Boolean(finishDrag)}>Overview</button>
             <button type="button" className="today-button" onClick={goToday} disabled={Boolean(finishDrag)}>Today</button>
           </div>
@@ -206,6 +224,7 @@ export default function App() {
           <span>{project.workPackages?.length ?? 0} packages</span>
           <span>{project.tasks.length} activities</span>
           <span>{analysis.criticalTaskIds.length} critical</span>
+          <span className="focus-stat">view · {workspaceView === '3d' ? '3D' : workspaceView}</span>
           {selectedWorkPackage
             ? <span className="focus-stat">package · {selectedWorkPackage.name}</span>
             : selectedWorkstream && <span className="focus-stat">workstream · {selectedWorkstream.name}</span>}
@@ -219,7 +238,7 @@ export default function App() {
           <p className="panel-label">Hierarchy</p>
           <h2>{selectedWorkPackage?.name ?? selectedWorkstream?.name ?? 'Project map'}</h2>
           <p className="panel-copy">
-            Dive Project → Workstream → Work Package → Task. Each level reveals more detail while every schedule object keeps the same physical location.
+            The hierarchy, schedule engine, selection, and scenarios are shared by 3D, Table, and Gantt. Change the view without changing the plan.
           </p>
 
           <div className="workstream-nav" aria-label="Workstream navigation">
@@ -265,12 +284,24 @@ export default function App() {
           )}
 
           <div className="navigation-hint-card">
-            <span className="control-title">In the world</span>
-            <strong>Double-click = dive in</strong>
-            <span>Lane / label → workstream</span>
-            <span>Package volume / label → work package</span>
-            <span>Task → activity</span>
-            <span>Breadcrumb → one level back out</span>
+            <span className="control-title">{workspaceView === '3d' ? 'In the world' : 'In the 2D twin'}</span>
+            {workspaceView === '3d' ? (
+              <>
+                <strong>Double-click = dive in</strong>
+                <span>Lane / label → workstream</span>
+                <span>Package volume / label → work package</span>
+                <span>Task → activity</span>
+                <span>Breadcrumb → one level back out</span>
+              </>
+            ) : (
+              <>
+                <strong>Same project, conventional surface</strong>
+                <span>Click a row → select activity</span>
+                <span>Double-click → focus hierarchy on activity</span>
+                <span>Scenario previews appear immediately</span>
+                <span>Switch to 3D → selection and focus remain</span>
+              </>
+            )}
           </div>
 
           <div className="analysis-controls" aria-label="Schedule analysis mode">
@@ -290,11 +321,11 @@ export default function App() {
               ))}
             </div>
             <p className="mode-description">
-              {analysisMode === 'critical' && 'Critical analysis temporarily cuts across hierarchy to reveal the controlling network.'}
+              {analysisMode === 'critical' && 'Critical analysis cuts across hierarchy in every view to reveal the controlling network.'}
               {analysisMode === 'drivers' && selectedTask && `Showing the chain that controls ${selectedTask.name}.`}
-              {analysisMode === 'normal' && selectedWorkPackage && `Detail level: ${selectedWorkPackage.name}. Sibling packages are still present but quiet.`}
-              {analysisMode === 'normal' && !selectedWorkPackage && selectedWorkstream && `Package boundaries are now visible inside ${selectedWorkstream.name}.`}
-              {analysisMode === 'normal' && !selectedWorkstream && 'Overview shows stable workstream geography. Dive in to reveal package structure.'}
+              {analysisMode === 'normal' && selectedWorkPackage && `Detail level: ${selectedWorkPackage.name}.`}
+              {analysisMode === 'normal' && !selectedWorkPackage && selectedWorkstream && `Focused on ${selectedWorkstream.name}.`}
+              {analysisMode === 'normal' && !selectedWorkstream && 'Project overview. All schedule activities are available.'}
             </p>
           </div>
 
@@ -325,38 +356,57 @@ export default function App() {
           </dl>
         </aside>
 
-        <div className="viewport" aria-label="3D project schedule viewport">
-          <Canvas
-            dpr={[1, 1.75]}
-            gl={{ antialias: true, alpha: false }}
-            onPointerMissed={() => {
-              if (!finishDrag) selectTask(null)
-            }}
-          >
-            <color attach="background" args={['#080d13']} />
-            <fog attach="fog" args={['#080d13', 34, 88]} />
-            <ProjectWorld
+        <div className={workspaceView === '3d' ? 'viewport' : 'viewport twin-viewport'} aria-label={`${workspaceView} project schedule viewport`}>
+          {workspaceView === '3d' ? (
+            <>
+              <Canvas
+                dpr={[1, 1.75]}
+                gl={{ antialias: true, alpha: false }}
+                onPointerMissed={() => {
+                  if (!finishDrag) selectTask(null)
+                }}
+              >
+                <color attach="background" args={['#080d13']} />
+                <fog attach="fog" args={['#080d13', 34, 88]} />
+                <ProjectWorld
+                  project={displayProject}
+                  analysis={analysis}
+                  drivers={drivers}
+                  baselineProject={scenario ? project : undefined}
+                  scenarioChanges={scenario?.changes}
+                />
+              </Canvas>
+              <div className="viewport-mode" aria-live="polite">
+                {selectedWorkPackage
+                  ? <span className="package-mode-chip">Package · {selectedWorkPackage.name}</span>
+                  : selectedWorkstream && <span className="focus-mode-chip">Workstream · {selectedWorkstream.name}</span>}
+                {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
+                {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
+                {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
+                {analysisMode === 'drivers' && selectedTask && <span className="driver-mode-chip">Drivers → {selectedTask.name}</span>}
+              </div>
+              <div className="viewport-caption">
+                <span>Past</span>
+                <span className="horizon-line" />
+                <strong>Future →</strong>
+              </div>
+            </>
+          ) : (
+            <TwinWorkspace
+              view={workspaceView}
               project={displayProject}
+              committedProject={project}
               analysis={analysis}
-              drivers={drivers}
-              baselineProject={scenario ? project : undefined}
+              analysisMode={analysisMode}
+              focusedWorkstreamId={focusedWorkstreamId}
+              focusedWorkPackageId={focusedWorkPackageId}
+              selectedTaskId={selectedTaskId}
+              driverTaskIds={drivers.taskIds}
               scenarioChanges={scenario?.changes}
+              onSelectTask={selectTask}
+              onFocusTask={focusTask}
             />
-          </Canvas>
-          <div className="viewport-mode" aria-live="polite">
-            {selectedWorkPackage
-              ? <span className="package-mode-chip">Package · {selectedWorkPackage.name}</span>
-              : selectedWorkstream && <span className="focus-mode-chip">Workstream · {selectedWorkstream.name}</span>}
-            {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
-            {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
-            {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
-            {analysisMode === 'drivers' && selectedTask && <span className="driver-mode-chip">Drivers → {selectedTask.name}</span>}
-          </div>
-          <div className="viewport-caption">
-            <span>Past</span>
-            <span className="horizon-line" />
-            <strong>Future →</strong>
-          </div>
+          )}
         </div>
 
         <aside className="inspector" aria-label="Selected activity inspector">
@@ -383,7 +433,7 @@ export default function App() {
                 onClick={() => focusTask(selectedTask.id)}
                 disabled={Boolean(finishDrag)}
               >
-                Dive to this activity
+                {workspaceView === '3d' ? 'Dive to this activity' : 'Focus hierarchy on this activity'}
               </button>
 
               <dl className="detail-list">
@@ -407,7 +457,7 @@ export default function App() {
                 <div><dt>Driving chain</dt><dd>{Math.max(0, drivers.taskIds.length - 1)} predecessors</dd></div>
               </dl>
 
-              {baseSelectedTask.kind === 'task' && (
+              {workspaceView === '3d' && baseSelectedTask.kind === 'task' && (
                 <div className="drag-instruction">
                   <span className="drag-handle-swatch" />
                   <div>
@@ -426,7 +476,7 @@ export default function App() {
                   }}
                 >
                   <div>
-                    <p className="panel-label">Exact-date fallback</p>
+                    <p className="panel-label">Shared scenario editor</p>
                     <strong>Type a finish date</strong>
                   </div>
                   <label htmlFor="scenario-finish">Preview finish</label>
@@ -457,9 +507,9 @@ export default function App() {
               </button>
 
               <div className="foundation-note">
-                <strong>Build 5 hierarchy rule</strong>
+                <strong>Build 6 twin rule</strong>
                 <p>
-                  Work packages are organizational metadata, not fake schedule activities. CPM and dependency math still operate only on real tasks and milestones.
+                  3D, Table, and Gantt are three views of one live project model. Selection, hierarchy, CPM, drivers, scenarios, and committed dates stay synchronized across all three.
                 </p>
               </div>
             </>
@@ -469,10 +519,10 @@ export default function App() {
               <h2>{selectedWorkPackage ? `${selectedWorkPackage.name} opened` : selectedWorkstream ? `${selectedWorkstream.name} opened` : 'Enter the project'}</h2>
               <p>
                 {selectedWorkPackage
-                  ? 'This package is the current detail boundary. Its tasks are emphasized and labeled; sibling packages remain visible as quiet context.'
+                  ? 'This package is the current detail boundary in every view. Select an activity to inspect or simulate it.'
                   : selectedWorkstream
-                    ? 'Work-package volumes are now visible. Double-click one to dive another level, or select a task directly.'
-                    : 'Choose a workstream, search for a package or task, or double-click the world to move down the hierarchy.'}
+                    ? 'Choose a package or activity. Table and Gantt use the same hierarchy boundary as the 3D world.'
+                    : 'Choose a workstream, search for a package or task, or use any of the three workspace views.'}
               </p>
             </div>
           )}
