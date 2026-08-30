@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 8 — Full Direct Manipulation is complete.**
+**Build 9 — History and Scenario Branches is complete.**
 
-The 3D workspace now supports three schedule-edit gestures on any selected normal task: resize the **START** edge, shift the whole task with **MOVE**, or resize the **FINISH** edge. All three create the same reversible schedule scenario, snap to working days, propagate downstream impact conservatively, and remain synchronized with Table, Gantt, CPM, Drivers, ghosts, Apply, and Reset.
+The prototype now supports safe schedule exploration on top of the Build 8 direct-manipulation model. What-if previews can be named and saved as reusable scenario branches, while only **Apply** creates committed project history. Applied changes can then be moved backward and forward with **Undo / Redo** without deleting saved alternatives.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -20,6 +20,7 @@ The 3D workspace now supports three schedule-edit gestures on any selected norma
 - Build 6 2D twin view: [`docs/BUILD_6.md`](docs/BUILD_6.md)
 - Build 7 project mini-map and orientation: [`docs/BUILD_7.md`](docs/BUILD_7.md)
 - Build 8 full direct manipulation: [`docs/BUILD_8.md`](docs/BUILD_8.md)
+- Build 9 history and scenario branches: [`docs/BUILD_9.md`](docs/BUILD_9.md)
 
 ## Product rule
 
@@ -43,6 +44,32 @@ npm run build
 
 ## Current capabilities
 
+### Safe exploration history
+
+- Committed project **Undo / Redo**
+- Only **Apply** creates a committed history revision
+- Preview, Save, Load, Delete, and Reset do not pollute committed history
+- Human-readable undo/redo action labels
+- 50-revision in-memory committed history cap
+- Redo clears when a different change is applied after Undo
+- **Cmd/Ctrl + Z** Undo
+- **Cmd/Ctrl + Shift + Z** Redo
+- **Ctrl + Y** Redo
+- Undo/Redo deliberately blocked while a preview or drag is active
+
+### Named scenario branches
+
+- Name any active what-if preview
+- Save the preview without applying it
+- Reuse a name to update the existing saved branch
+- Preview a saved branch later
+- Delete saved branches independently from project history
+- Saved branch stores source activity, edit kind, requested dates, and alternate project state
+- Reopened branches recalculate CPM and schedule differences against the current committed project
+- Saved branches survive Apply, Undo, and Redo
+- Saved-branch projected project finish shown in the branch panel
+- Entire feature is in-memory only in V0.1
+
 ### Synchronized project surfaces
 
 - **3D** spatial schedule and causal simulation view
@@ -52,6 +79,7 @@ npm run build
 - One shared CPM/driver analysis across all renderers
 - Shared selected activity and hierarchy focus
 - Shared scenario preview, Apply, and Reset state
+- Shared history and saved scenarios
 - Normal mode respects the same hierarchy boundary in every view
 - Critical Path and Drivers cut across hierarchy consistently in every view
 
@@ -102,7 +130,7 @@ npm run build
 - Milestone beacons
 - Orbit and zoom navigation
 - Click selection and shared inspector
-- Stable geography across analysis modes, hierarchy focus, and scenario changes
+- Stable geography across analysis modes, hierarchy focus, scenario changes, and history revisions
 - Animated task movement when scenario dates change
 - Wireframe ghosts for committed positions
 - Dashed movement trails from committed to scenario positions
@@ -187,8 +215,8 @@ npm run build
 ## Initial V0.1 direction
 
 - Keyboard navigation shortcuts and optional free-flight mode
-- Named scenario branches and richer undo/redo
 - Gantt drag editing through the existing scenario engine
+- Scenario persistence / import-export only after the local interaction model is proven
 - Richer recursive hierarchy below work package only if the current semantic model proves useful
 - Later project/resource calendars and holidays
 - Import/export and persistence
