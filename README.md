@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 4 — Navigation and Semantic Zoom is complete.**
+**Build 5 — Hierarchical Semantic Zoom is complete.**
 
-The app now combines CPM/driver analysis, reversible scenario propagation, direct 3D finish manipulation, and a real navigation layer: project search, animated fly-to camera moves, workstream semantic focus, breadcrumbs, Overview/Today recovery, and in-world double-click navigation.
+The app now combines CPM/driver analysis, reversible scenario propagation, direct 3D finish manipulation, animated navigation, and a real hierarchy: **Project → Workstream → Work Package → Task**. Work-package volumes appear only after entering a workstream, package focus reveals its member activities, and breadcrumbs let the user back out without changing the project's stable spatial geography.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -16,6 +16,7 @@ The app now combines CPM/driver analysis, reversible scenario propagation, direc
 - Build 2 scenario propagation: [`docs/BUILD_2.md`](docs/BUILD_2.md)
 - Build 3 direct manipulation: [`docs/BUILD_3.md`](docs/BUILD_3.md)
 - Build 4 navigation and semantic zoom: [`docs/BUILD_4.md`](docs/BUILD_4.md)
+- Build 5 hierarchical semantic zoom: [`docs/BUILD_5.md`](docs/BUILD_5.md)
 
 ## Product rule
 
@@ -49,28 +50,34 @@ npm run build
 - Milestone beacons
 - Orbit and zoom navigation
 - Click selection and 2D inspector
-- Stable geography across analysis modes, semantic focus, and scenario changes
+- Stable geography across analysis modes, hierarchy focus, and scenario changes
 - Animated task movement when scenario dates change
 - Wireframe ghosts for committed positions
 - Dashed movement trails from committed to scenario positions
 - Selected-task finish handle for direct 3D editing
 - Live snapped finish-date label while dragging
 - Camera orbit lock during direct manipulation
+- Translucent work-package volumes revealed at workstream level
 
-### Navigation
+### Hierarchy and navigation
 
-- Project-wide search across tasks, milestones, workstreams, and owners
-- Animated camera fly-to for tasks and workstreams
+- Project → Workstream → Work Package → Task semantic hierarchy
+- 12 AURORA work packages across six workstreams
+- Work packages are metadata, not synthetic CPM activities
+- Project-wide search across workstreams, work packages, tasks, milestones, and owners
+- Animated camera fly-to for workstreams, work packages, and tasks
 - **Overview** recovery action
 - **Today** recovery action
-- Breadcrumb location: project / workstream / selected activity
+- Breadcrumb location through all four hierarchy levels
 - Left-panel workstream navigator
+- Contextual work-package navigator after entering a workstream
 - Double-click task to focus and fly to it
 - Double-click lane/workstream label to enter that workstream
+- Double-click work-package volume/label to enter that package
 - Double-click Today plane to return home
-- Workstream semantic focus without geometry rearrangement
-- Expanded task labels inside the focused workstream
-- Inspector **Focus camera on this** action
+- Semantic focus without geometry rearrangement
+- Package-member task labels expand at deeper levels
+- Inspector **Dive to this activity** action
 
 ### Schedule analysis
 
@@ -104,18 +111,18 @@ npm run build
 
 ### Analysis views
 
-- **Normal** — immediate dependency context plus semantic workstream focus
-- **Critical Path** — fades non-critical work and can surface critical work outside the focused lane
-- **Drivers** — exposes the controlling chain even when it crosses workstreams
+- **Normal** — semantic hierarchy focus plus immediate selected-task dependency context
+- **Critical Path** — fades non-critical work and can cut across the current hierarchy level
+- **Drivers** — exposes the controlling chain even when it crosses workstreams or work packages
 
 ## Initial V0.1 direction
 
-- Recursive hierarchy and deeper semantic zoom below workstream
 - Start-edge and whole-task schedule manipulation
 - Mini-map / project orientation aid
 - Keyboard navigation shortcuts and optional free-flight mode
 - Simple 2D task table using the same project engine
 - Named scenario branches and richer undo/redo
+- Richer recursive hierarchy below work package only if the current semantic model proves useful
 - Later project/resource calendars and holidays
 - Import/export and persistence
 
