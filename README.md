@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 6 — 2D Twin View is complete.**
+**Build 7 — Project Mini-Map and Orientation is complete.**
 
-The app now has three synchronized project surfaces: **3D, Table, and Gantt**. All three read the same project model, schedule analysis, hierarchy focus, selection, and scenario state. A user can inspect a task conventionally, simulate a change, then return to the 3D causal world without losing context or creating a second copy of the schedule.
+The 3D workspace now has a permanent interactive project map that preserves the same spatial grammar as the world: workstreams left-to-right, past-to-future vertically, Today as a strong reference line, milestones as beacons, package focus as a bounded region, and the active camera focus/zoom footprint as an orientation cue. The map appears only in 3D; Table and Gantt remain uncluttered.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -18,6 +18,7 @@ The app now has three synchronized project surfaces: **3D, Table, and Gantt**. A
 - Build 4 navigation and semantic zoom: [`docs/BUILD_4.md`](docs/BUILD_4.md)
 - Build 5 hierarchical semantic zoom: [`docs/BUILD_5.md`](docs/BUILD_5.md)
 - Build 6 2D twin view: [`docs/BUILD_6.md`](docs/BUILD_6.md)
+- Build 7 project mini-map and orientation: [`docs/BUILD_7.md`](docs/BUILD_7.md)
 
 ## Product rule
 
@@ -52,6 +53,24 @@ npm run build
 - Shared scenario preview, Apply, and Reset state
 - Normal mode respects the same hierarchy boundary in every view
 - Critical Path and Drivers cut across hierarchy consistently in every view
+
+### Project orientation
+
+- Permanent 3D-only interactive mini-map
+- Same workstream geography as the 3D world
+- Past → future time orientation
+- Strong Today reference line
+- Milestone beacons with critical treatment
+- Current selected-activity marker
+- Focused work-package time region
+- Camera navigation focus and approximate zoom footprint
+- Mouse-wheel zoom updates the footprint size
+- Free panning clears stale camera focus rather than showing misleading orientation
+- Click workstream lane → focus/fly to workstream
+- Click milestone → focus/fly to milestone
+- Click Today → return home
+- Click Overview → frame the project
+- Scenario preview milestones use the active scenario project positions
 
 ### Spatial schedule
 
@@ -152,7 +171,6 @@ npm run build
 ## Initial V0.1 direction
 
 - Start-edge and whole-task schedule manipulation
-- Mini-map / project orientation aid
 - Keyboard navigation shortcuts and optional free-flight mode
 - Named scenario branches and richer undo/redo
 - Gantt drag editing only through the existing scenario engine
