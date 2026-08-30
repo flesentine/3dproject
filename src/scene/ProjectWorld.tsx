@@ -1,4 +1,4 @@
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DoubleSide, Group, Vector3 } from 'three'
@@ -8,9 +8,10 @@ import type {
   ScenarioTaskChange,
   ScheduleAnalysis,
 } from '../domain/project'
+import { getNavigationFrame } from '../navigation/navigation'
 import { useProjectStore } from '../state/useProjectStore'
 import { finishDateFromWorldZ } from '../visualization/finishDrag'
-import { buildWorldLayout, type TaskVisual } from '../visualization/layout'
+import { buildWorldLayout, type TaskVisual, type WorldLayout } from '../visualization/layout'
 
 const workstreamColors = [
   '#4e79a7',
@@ -41,7 +42,59 @@ interface TaskBlockProps {
   analysis: ScheduleAnalysis
   driverTaskIds: Set<string>
   scenarioChangedTaskIds: Set<string>
+  focusedWorkstreamId: string | null
   onBeginFinishDrag: (taskId: string) => void
+}
+
+interface OrbitControlsLike {
+  target: Vector3
+  update: () => void
+}
+
+function CameraRig({ project, layout }: { project: ProjectModel; layout: WorldLayout }) {
+  const camera = useThree((state) => state.camera)
+  const controls = useThree((state) => state.controls) as OrbitControlsLike | null
+  const navigationRequest = useProjectStore((state) => state.navigationRequest)
+  const destination = useRef(new Vector3())
+  const target = useRef(new Vector3())
+  const active = useRef(false)
+
+  useEffect(() => {
+    const frame = getNavigationFrame(project, layout, navigationRequest)
+    destination.current.set(...frame.position)
+    target.current.set(...frame.target)
+    active.current = true
+  }, [layout, navigationRequest, project])
+
+  useFrame((_, delta) => {
+    if (!active.current) return
+
+    const blend = 1 - Math.exp(-5.5 * delta)
+    camera.position.lerp(destination.current, blend)
+
+    if (controls) {
+      controls.target.lerp(target.current, blend)
+      controls.update()
+    } else {
+      camera.lookAt(target.current)
+    }
+
+    if (
+      camera.position.distanceToSquared(destination.current) < 0.01 &&
+      (!controls || controls.target.distanceToSquared(target.current) < 0.01)
+    ) {
+      camera.position.copy(destination.current)
+      if (controls) {
+        controls.target.copy(target.current)
+        controls.update()
+      } else {
+        camera.lookAt(target.current)
+      }
+      active.current = false
+    }
+  })
+
+  return null
 }
 
 function TaskBlock({
@@ -50,12 +103,14 @@ function TaskBlock({
   analysis,
   driverTaskIds,
   scenarioChangedTaskIds,
+  focusedWorkstreamId,
   onBeginFinishDrag,
 }: TaskBlockProps) {
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const analysisMode = useProjectStore((state) => state.analysisMode)
   const finishDrag = useProjectStore((state) => state.finishDrag)
   const selectTask = useProjectStore((state) => state.selectTask)
+  const focusTask = useProjectStore((state) => state.focusTask)
   const [hovered, setHovered] = useState(false)
   const [handleHovered, setHandleHovered] = useState(false)
   const groupRef = useRef<Group>(null)
@@ -65,12 +120,14 @@ function TaskBlock({
   const isCritical = metrics?.isCritical ?? false
   const isDriver = driverTaskIds.has(visual.task.id)
   const scenarioChanged = scenarioChangedTaskIds.has(visual.task.id)
-  const emphasized =
+  const inFocusedWorkstream = !focusedWorkstreamId || visual.task.workstreamId === focusedWorkstreamId
+  const analysisEmphasized =
     selected ||
     analysisMode === 'normal' ||
     (analysisMode === 'critical' && isCritical) ||
     (analysisMode === 'drivers' && isDriver)
-  const muted = !emphasized
+  const semanticMuted = analysisMode === 'normal' && !inFocusedWorkstream
+  const muted = !analysisEmphasized || semanticMuted
   const analysisColor =
     analysisMode === 'critical' && isCritical
       ? criticalColor
@@ -114,29 +171,33 @@ function TaskBlock({
       event.stopPropagation()
       selectTask(task.id)
     },
+    onDoubleClick: (event: ThreeEvent<MouseEvent>) => {
+      event.stopPropagation()
+      focusTask(task.id)
+    },
   }
 
   if (task.kind === 'milestone') {
     return (
       <group ref={groupRef} {...pointerHandlers}>
         <mesh
-          scale={selected ? 1.25 : hovered ? 1.12 : emphasized ? 1 : 0.82}
+          scale={selected ? 1.25 : hovered ? 1.12 : analysisEmphasized ? 1 : 0.82}
           rotation={[0, Math.PI / 4, 0]}
         >
           <octahedronGeometry args={[0.55, 0]} />
           <meshStandardMaterial
             color={selected ? '#ffffff' : analysisColor}
-            emissive={selected || scenarioChanged || (analysisMode !== 'normal' && emphasized) ? analysisColor : '#000000'}
-            emissiveIntensity={selected ? 0.55 : scenarioChanged ? 0.26 : analysisMode !== 'normal' && emphasized ? 0.32 : 0}
+            emissive={selected || scenarioChanged || (analysisMode !== 'normal' && analysisEmphasized) ? analysisColor : '#000000'}
+            emissiveIntensity={selected ? 0.55 : scenarioChanged ? 0.26 : analysisMode !== 'normal' && analysisEmphasized ? 0.32 : 0}
             transparent={muted}
-            opacity={muted ? 0.12 : 1}
+            opacity={muted ? 0.05 : 1}
             depthWrite={!muted}
           />
         </mesh>
         <Text
           position={[0, 1.05, 0]}
           fontSize={0.34}
-          color={muted ? '#3f4b5a' : '#e8edf4'}
+          color={muted ? '#283441' : '#e8edf4'}
           anchorX="center"
           anchorY="middle"
           maxWidth={3.2}
@@ -150,19 +211,20 @@ function TaskBlock({
   const progressDepth = Math.max(0, Math.min(size[2], size[2] * task.progress))
   const progressZ = -size[2] / 2 + progressDepth / 2
   const activelyDragging = finishDrag?.taskId === task.id
+  const showSemanticLabel = selected || hovered || Boolean(focusedWorkstreamId && inFocusedWorkstream)
 
   return (
     <group ref={groupRef} {...pointerHandlers}>
       <mesh scale={selected ? [1.04, 1.18, 1.02] : hovered ? [1.02, 1.08, 1.01] : [1, 1, 1]}>
         <boxGeometry args={size} />
         <meshStandardMaterial
-          color={selected ? '#dfe8f5' : analysisMode !== 'normal' && emphasized ? analysisColor : scenarioChanged ? '#4a402a' : '#293442'}
+          color={selected ? '#dfe8f5' : analysisMode !== 'normal' && analysisEmphasized ? analysisColor : scenarioChanged ? '#4a402a' : '#293442'}
           emissive={scenarioChanged && !selected ? scenarioColor : '#000000'}
           emissiveIntensity={scenarioChanged && !selected ? 0.11 : 0}
           roughness={0.72}
           metalness={0.08}
           transparent={muted}
-          opacity={muted ? 0.1 : 1}
+          opacity={muted ? 0.035 : 1}
           depthWrite={!muted}
         />
       </mesh>
@@ -175,63 +237,71 @@ function TaskBlock({
             roughness={0.62}
             metalness={0.1}
             transparent={muted}
-            opacity={muted ? 0.08 : 1}
+            opacity={muted ? 0.025 : 1}
             depthWrite={!muted}
           />
         </mesh>
       )}
 
+      {showSemanticLabel && !muted && (
+        <Text
+          position={[0, selected ? 1.05 : 0.88, 0]}
+          fontSize={selected ? 0.32 : 0.22}
+          color={selected ? '#ffffff' : '#b8c5d5'}
+          anchorX="center"
+          anchorY="middle"
+          maxWidth={3.2}
+        >
+          {task.name}
+        </Text>
+      )}
+
       {selected && (
-        <>
-          <Text position={[0, 1.05, 0]} fontSize={0.32} color="#ffffff" anchorX="center" anchorY="middle" maxWidth={3.4}>
-            {task.name}
-          </Text>
-          <group position={[0, 0.05, size[2] / 2 + 0.12]}>
-            <Line
-              points={[[-size[0] * 0.46, 0, 0], [size[0] * 0.46, 0, 0]]}
-              color={dragHandleColor}
-              lineWidth={activelyDragging ? 3 : 1.8}
-              transparent
-              opacity={activelyDragging || handleHovered ? 1 : 0.72}
+        <group position={[0, 0.05, size[2] / 2 + 0.12]}>
+          <Line
+            points={[[-size[0] * 0.46, 0, 0], [size[0] * 0.46, 0, 0]]}
+            color={dragHandleColor}
+            lineWidth={activelyDragging ? 3 : 1.8}
+            transparent
+            opacity={activelyDragging || handleHovered ? 1 : 0.72}
+          />
+          <mesh
+            scale={activelyDragging ? 1.28 : handleHovered ? 1.14 : 1}
+            onPointerEnter={(event) => {
+              event.stopPropagation()
+              setHandleHovered(true)
+              document.body.style.cursor = 'col-resize'
+            }}
+            onPointerLeave={() => {
+              setHandleHovered(false)
+              if (!activelyDragging) document.body.style.cursor = ''
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+              onBeginFinishDrag(task.id)
+            }}
+          >
+            <sphereGeometry args={[0.22, 16, 12]} />
+            <meshStandardMaterial
+              color={activelyDragging ? '#fff2c8' : dragHandleColor}
+              emissive={dragHandleColor}
+              emissiveIntensity={activelyDragging ? 0.65 : 0.28}
+              roughness={0.42}
             />
-            <mesh
-              scale={activelyDragging ? 1.28 : handleHovered ? 1.14 : 1}
-              onPointerEnter={(event) => {
-                event.stopPropagation()
-                setHandleHovered(true)
-                document.body.style.cursor = 'col-resize'
-              }}
-              onPointerLeave={() => {
-                setHandleHovered(false)
-                if (!activelyDragging) document.body.style.cursor = ''
-              }}
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                onBeginFinishDrag(task.id)
-              }}
+          </mesh>
+          {(handleHovered || activelyDragging) && (
+            <Text
+              position={[0, 0.72, 0]}
+              fontSize={0.25}
+              color="#ffe7a8"
+              anchorX="center"
+              anchorY="middle"
+              maxWidth={2.7}
             >
-              <sphereGeometry args={[0.22, 16, 12]} />
-              <meshStandardMaterial
-                color={activelyDragging ? '#fff2c8' : dragHandleColor}
-                emissive={dragHandleColor}
-                emissiveIntensity={activelyDragging ? 0.65 : 0.28}
-                roughness={0.42}
-              />
-            </mesh>
-            {(handleHovered || activelyDragging) && (
-              <Text
-                position={[0, 0.72, 0]}
-                fontSize={0.25}
-                color="#ffe7a8"
-                anchorX="center"
-                anchorY="middle"
-                maxWidth={2.7}
-              >
-                {activelyDragging ? (finishDrag?.finish ?? task.finish) : 'DRAG FINISH'}
-              </Text>
-            )}
-          </group>
-        </>
+              {activelyDragging ? (finishDrag?.finish ?? task.finish) : 'DRAG FINISH'}
+            </Text>
+          )}
+        </group>
       )}
     </group>
   )
@@ -338,7 +408,17 @@ function ScenarioGhosts({
   )
 }
 
-function WorkstreamLabels({ project, visuals }: { project: ProjectModel; visuals: TaskVisual[] }) {
+function WorkstreamLabels({
+  project,
+  visuals,
+  focusedWorkstreamId,
+  onFocus,
+}: {
+  project: ProjectModel
+  visuals: TaskVisual[]
+  focusedWorkstreamId: string | null
+  onFocus: (workstreamId: string) => void
+}) {
   const laneByWorkstream = useMemo(() => {
     const layout = buildWorldLayout(project)
     return new Map(layout.lanes.map((lane) => [lane.workstream.id, lane.x]))
@@ -348,20 +428,28 @@ function WorkstreamLabels({ project, visuals }: { project: ProjectModel; visuals
 
   return (
     <group>
-      {project.workstreams.map((workstream) => (
-        <Text
-          key={workstream.id}
-          position={[laneByWorkstream.get(workstream.id) ?? 0, 0.2, firstZ]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={0.38}
-          color="#9caabd"
-          anchorX="center"
-          anchorY="middle"
-          maxWidth={3.5}
-        >
-          {workstream.name}
-        </Text>
-      ))}
+      {project.workstreams.map((workstream) => {
+        const focused = focusedWorkstreamId === workstream.id
+        const muted = Boolean(focusedWorkstreamId && !focused)
+        return (
+          <Text
+            key={workstream.id}
+            position={[laneByWorkstream.get(workstream.id) ?? 0, 0.2, firstZ]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            fontSize={focused ? 0.5 : 0.38}
+            color={muted ? '#354252' : focused ? '#d9e9fb' : '#9caabd'}
+            anchorX="center"
+            anchorY="middle"
+            maxWidth={3.5}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              onFocus(workstream.id)
+            }}
+          >
+            {workstream.name}
+          </Text>
+        )
+      })}
     </group>
   )
 }
@@ -416,9 +504,12 @@ export function ProjectWorld({
 }: ProjectWorldProps) {
   const layout = useMemo(() => buildWorldLayout(project), [project])
   const finishDrag = useProjectStore((state) => state.finishDrag)
+  const focusedWorkstreamId = useProjectStore((state) => state.focusedWorkstreamId)
   const beginFinishDrag = useProjectStore((state) => state.beginFinishDrag)
   const endFinishDrag = useProjectStore((state) => state.endFinishDrag)
   const selectTask = useProjectStore((state) => state.selectTask)
+  const focusWorkstream = useProjectStore((state) => state.focusWorkstream)
+  const goToday = useProjectStore((state) => state.goToday)
   const driverTaskIds = useMemo(() => new Set(drivers.taskIds), [drivers.taskIds])
   const scenarioChangedTaskIds = useMemo(
     () => new Set(scenarioChanges.map((change) => change.taskId)),
@@ -456,10 +547,11 @@ export function ProjectWorld({
         makeDefault
         enabled={!draggingFinish}
         target={[0, 0.8, worldCenterZ * 0.55]}
-        minDistance={6}
-        maxDistance={85}
+        minDistance={4}
+        maxDistance={95}
         maxPolarAngle={Math.PI / 2.04}
       />
+      <CameraRig project={project} layout={layout} />
 
       <ambientLight intensity={1.15} />
       <directionalLight position={[8, 18, -6]} intensity={2.4} />
@@ -467,14 +559,36 @@ export function ProjectWorld({
 
       <gridHelper args={[80, 80, '#263345', '#16202c']} position={[0, 0, worldCenterZ]} />
 
-      {layout.lanes.map((lane, index) => (
-        <mesh key={lane.workstream.id} position={[lane.x, 0.015, worldCenterZ]}>
-          <boxGeometry args={[3.55, 0.03, worldDepth]} />
-          <meshStandardMaterial color={index % 2 === 0 ? '#111923' : '#0d151e'} transparent opacity={0.72} />
-        </mesh>
-      ))}
+      {layout.lanes.map((lane, index) => {
+        const focused = focusedWorkstreamId === lane.workstream.id
+        const muted = Boolean(focusedWorkstreamId && !focused)
+        return (
+          <mesh
+            key={lane.workstream.id}
+            position={[lane.x, 0.015, worldCenterZ]}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              focusWorkstream(lane.workstream.id)
+            }}
+          >
+            <boxGeometry args={[3.55, 0.03, worldDepth]} />
+            <meshStandardMaterial
+              color={index % 2 === 0 ? '#111923' : '#0d151e'}
+              transparent
+              opacity={muted ? 0.16 : focused ? 0.94 : 0.72}
+            />
+          </mesh>
+        )
+      })}
 
-      <mesh position={[0, 3.2, layout.todayZ]} onClick={() => selectTask(null)}>
+      <mesh
+        position={[0, 3.2, layout.todayZ]}
+        onClick={() => selectTask(null)}
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+          goToday()
+        }}
+      >
         <planeGeometry args={[30, 6.4]} />
         <meshBasicMaterial color="#7fa6d9" transparent opacity={0.11} side={DoubleSide} depthWrite={false} />
       </mesh>
@@ -482,7 +596,12 @@ export function ProjectWorld({
         TODAY · {project.statusDate}
       </Text>
 
-      <WorkstreamLabels project={project} visuals={layout.tasks} />
+      <WorkstreamLabels
+        project={project}
+        visuals={layout.tasks}
+        focusedWorkstreamId={focusedWorkstreamId}
+        onFocus={focusWorkstream}
+      />
       {baselineProject && scenarioChanges.length > 0 && (
         <ScenarioGhosts
           baselineProject={baselineProject}
@@ -500,6 +619,7 @@ export function ProjectWorld({
           analysis={analysis}
           driverTaskIds={driverTaskIds}
           scenarioChangedTaskIds={scenarioChangedTaskIds}
+          focusedWorkstreamId={focusedWorkstreamId}
           onBeginFinishDrag={beginFinishDrag}
         />
       ))}
