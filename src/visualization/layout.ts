@@ -46,7 +46,8 @@ export function buildWorldLayout(project: ProjectModel, anchorStart?: ISODate): 
     return { workstream, x }
   })
 
-  const projectStart = anchorStart ?? getProjectStart(project)
+  const actualProjectStart = getProjectStart(project)
+  const timeOrigin = anchorStart ?? project.statusDate
 
   const projectFinish = project.tasks.reduce(
     (latest, task) => (task.finish > latest ? task.finish : latest),
@@ -54,7 +55,7 @@ export function buildWorldLayout(project: ProjectModel, anchorStart?: ISODate): 
   )
 
   const tasks = project.tasks.map<TaskVisual>((task) => {
-    const startDay = differenceInDays(projectStart, task.start)
+    const startDay = differenceInDays(timeOrigin, task.start)
     const durationDays = Math.max(1, differenceInDays(task.start, task.finish) + 1)
     const depth = task.kind === 'milestone' ? WORLD_SCALE.milestoneSize : durationDays * WORLD_SCALE.day
     const width = task.kind === 'milestone' ? WORLD_SCALE.milestoneSize : WORLD_SCALE.taskWidth
@@ -74,8 +75,8 @@ export function buildWorldLayout(project: ProjectModel, anchorStart?: ISODate): 
   return {
     lanes,
     tasks,
-    todayZ: differenceInDays(projectStart, project.statusDate) * WORLD_SCALE.day,
-    startZ: 0,
-    finishZ: differenceInDays(projectStart, projectFinish) * WORLD_SCALE.day,
+    todayZ: differenceInDays(timeOrigin, project.statusDate) * WORLD_SCALE.day,
+    startZ: differenceInDays(timeOrigin, actualProjectStart) * WORLD_SCALE.day,
+    finishZ: differenceInDays(timeOrigin, projectFinish) * WORLD_SCALE.day,
   }
 }
