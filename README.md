@@ -6,14 +6,15 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 2 — Scenario Propagation is complete.**
+**Build 3 — Direct 3D Finish Manipulation is complete.**
 
-The app now combines the Build 1 CPM/driver engine with reversible what-if finish-date scenarios, conservative downstream propagation, animated 3D schedule movement, committed-position ghost geometry, and Apply / Reset scenario control.
+The app now combines CPM/driver analysis, reversible scenario propagation, ghosted committed geometry, and direct finish-edge manipulation inside the 3D schedule world. Select a task, grab its gold finish handle, drag through time, and watch the same scenario engine propagate downstream impact live.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
 - Build 1 critical path and drivers: [`docs/BUILD_1.md`](docs/BUILD_1.md)
 - Build 2 scenario propagation: [`docs/BUILD_2.md`](docs/BUILD_2.md)
+- Build 3 direct manipulation: [`docs/BUILD_3.md`](docs/BUILD_3.md)
 
 ## Product rule
 
@@ -41,7 +42,7 @@ npm run build
 
 - Structured 3D schedule world
 - Six stable workstream lanes
-- Today/status-date plane
+- Today/status-date plane anchored at Z=0
 - Task duration represented spatially
 - Progress fill
 - Milestone beacons
@@ -51,6 +52,9 @@ npm run build
 - Animated task movement when scenario dates change
 - Wireframe ghosts for committed positions
 - Dashed movement trails from committed to scenario positions
+- Selected-task finish handle for direct 3D editing
+- Live snapped finish-date label while dragging
+- Camera orbit lock during direct manipulation
 
 ### Schedule analysis
 
@@ -70,7 +74,9 @@ npm run build
 ### Scenario simulation
 
 - Finish-date what-if preview for tasks and milestones
+- Direct finish dragging for normal tasks
 - +5 / +10 workday quick scenarios
+- Exact-date fallback editor
 - Conservative downstream propagation
 - Existing schedule gap can absorb a delay
 - Existing baseline relationship offsets are preserved instead of silently repaired
@@ -88,7 +94,7 @@ npm run build
 
 ## Initial V0.1 direction
 
-- Direct 3D date editing / drag handles
+- Start-edge and whole-task schedule manipulation
 - Hierarchical drill-down with semantic zoom
 - Search, focus, breadcrumbs, and return-to-Today navigation
 - Simple 2D task table using the same project engine
