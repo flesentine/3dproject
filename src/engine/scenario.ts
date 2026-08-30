@@ -1,0 +1,191 @@
+import { addWorkingDays, compareISODate, isWorkingDay, parseISODate, workingDaysInclusive } from '../domain/dates'
+import type {
+  Dependency,
+  ISODate,
+  ProjectModel,
+  ProjectTask,
+  ScenarioResult,
+  ScenarioTaskChange,
+} from '../domain/project'
+import { scheduleEngine } from './schedule'
+
+function durationWorkdays(task: ProjectTask): number {
+  if (task.kind === 'milestone') return 0
+  return Math.max(1, workingDaysInclusive(task.start, task.finish))
+}
+
+function taskSpan(task: ProjectTask): number {
+  const duration = durationWorkdays(task)
+  return duration === 0 ? 0 : duration - 1
+}
+
+function isValidScenarioDependency(dependency: Dependency, taskById: Map<string, ProjectTask>): boolean {
+  const from = taskById.get(dependency.fromTaskId)
+  const to = taskById.get(dependency.toTaskId)
+
+  return Boolean(
+    from &&
+      to &&
+      from.kind !== 'summary' &&
+      to.kind !== 'summary' &&
+      dependency.fromTaskId !== dependency.toTaskId &&
+      Number.isInteger(dependency.lagDays),
+  )
+}
+
+function requiredSuccessorStart(
+  dependency: Dependency,
+  predecessor: ProjectTask,
+  successorSpan: number,
+): ISODate {
+  switch (dependency.type) {
+    case 'FS':
+      return addWorkingDays(predecessor.finish, dependency.lagDays + 1)
+    case 'SS':
+      return addWorkingDays(predecessor.start, dependency.lagDays)
+    case 'FF': {
+      const requiredFinish = addWorkingDays(predecessor.finish, dependency.lagDays)
+      return addWorkingDays(requiredFinish, -successorSpan)
+    }
+    case 'SF': {
+      const requiredFinish = addWorkingDays(predecessor.start, dependency.lagDays)
+      return addWorkingDays(requiredFinish, -successorSpan)
+    }
+  }
+}
+
+function workingDayDistance(from: ISODate, to: ISODate): number {
+  const comparison = compareISODate(from, to)
+  if (comparison === 0) return 0
+
+  const direction = comparison < 0 ? 1 : -1
+  let cursor = from
+  let distance = 0
+
+  while (cursor !== to) {
+    cursor = addWorkingDays(cursor, direction)
+    distance += direction
+
+    if (Math.abs(distance) > 100_000) {
+      throw new Error(`Working-day distance exceeded safety limit: ${from} → ${to}`)
+    }
+  }
+
+  return distance
+}
+
+function buildChanges(base: ProjectModel, scenario: ProjectModel, sourceTaskId: string): ScenarioTaskChange[] {
+  const scenarioById = new Map(scenario.tasks.map((task) => [task.id, task]))
+
+  return base.tasks.flatMap((original) => {
+    const next = scenarioById.get(original.id)
+    if (!next || (next.start === original.start && next.finish === original.finish)) return []
+
+    return [{
+      taskId: original.id,
+      originalStart: original.start,
+      originalFinish: original.finish,
+      scenarioStart: next.start,
+      scenarioFinish: next.finish,
+      startShiftWorkdays: workingDayDistance(original.start, next.start),
+      finishShiftWorkdays: workingDayDistance(original.finish, next.finish),
+      isSourceEdit: original.id === sourceTaskId,
+    }]
+  })
+}
+
+export function simulateFinishChange(
+  project: ProjectModel,
+  taskId: string,
+  requestedFinish: ISODate,
+): ScenarioResult {
+  const source = project.tasks.find((task) => task.id === taskId)
+  if (!source) return { ok: false, message: 'The selected activity no longer exists.' }
+  if (source.kind === 'summary') return { ok: false, message: 'Summary activities cannot be edited in Build 2 scenarios.' }
+
+  let finishDate: Date
+  try {
+    finishDate = parseISODate(requestedFinish)
+  } catch {
+    return { ok: false, message: 'Choose a valid finish date.' }
+  }
+
+  if (!isWorkingDay(finishDate)) {
+    return { ok: false, message: 'Build 2 scenarios use a Monday–Friday calendar. Choose a weekday finish.' }
+  }
+
+  if (source.kind !== 'milestone' && compareISODate(requestedFinish, source.start) < 0) {
+    return { ok: false, message: 'Finish cannot be earlier than the activity start.' }
+  }
+
+  const baseAnalysis = scheduleEngine.analyze(project)
+  if (baseAnalysis.validationIssues.some((issue) => issue.code === 'DEPENDENCY_CYCLE')) {
+    return { ok: false, message: 'Scenario propagation is disabled until the dependency cycle is removed.' }
+  }
+
+  const baseTaskById = new Map(project.tasks.map((task) => [task.id, task]))
+  const scenarioTaskById = new Map(project.tasks.map((task) => [task.id, { ...task }]))
+  const validDependencies = project.dependencies.filter((dependency) =>
+    isValidScenarioDependency(dependency, baseTaskById),
+  )
+  const incomingByTask = new Map<string, Dependency[]>()
+
+  for (const task of project.tasks) incomingByTask.set(task.id, [])
+  for (const dependency of validDependencies) {
+    incomingByTask.get(dependency.toTaskId)?.push(dependency)
+  }
+
+  const sourceScenario = scenarioTaskById.get(taskId)
+  if (!sourceScenario) return { ok: false, message: 'The selected activity could not be loaded.' }
+
+  if (sourceScenario.kind === 'milestone') {
+    sourceScenario.start = requestedFinish
+    sourceScenario.finish = requestedFinish
+  } else {
+    sourceScenario.finish = requestedFinish
+  }
+
+  const downstream = new Set(scheduleEngine.getDownstream(project, taskId))
+
+  for (const successorId of baseAnalysis.topologicalOrder) {
+    if (!downstream.has(successorId)) continue
+
+    const successor = scenarioTaskById.get(successorId)
+    const originalSuccessor = baseTaskById.get(successorId)
+    if (!successor || !originalSuccessor || successor.kind === 'summary') continue
+
+    const span = taskSpan(originalSuccessor)
+    let requiredStart = successor.start
+
+    for (const dependency of incomingByTask.get(successorId) ?? []) {
+      const predecessor = scenarioTaskById.get(dependency.fromTaskId)
+      if (!predecessor) continue
+
+      const constraint = requiredSuccessorStart(dependency, predecessor, span)
+      if (compareISODate(constraint, requiredStart) > 0) requiredStart = constraint
+    }
+
+    if (compareISODate(requiredStart, successor.start) <= 0) continue
+
+    successor.start = requiredStart
+    successor.finish = span === 0 ? requiredStart : addWorkingDays(requiredStart, span)
+  }
+
+  const scenarioProject: ProjectModel = {
+    ...project,
+    tasks: project.tasks.map((task) => scenarioTaskById.get(task.id) ?? task),
+  }
+  const analysis = scheduleEngine.analyze(scenarioProject)
+  const changes = buildChanges(project, scenarioProject, taskId)
+
+  return {
+    ok: true,
+    scenario: {
+      sourceTaskId: taskId,
+      requestedFinish,
+      project: scenarioProject,
+      analysis,
+      changes,
+    },
+  }
+}
