@@ -1,0 +1,97 @@
+.direct-manipulation-card {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid #5c4c29;
+  border-radius: 10px;
+  background: #1b1810;
+  color: #a99f83;
+  font-size: 0.75rem;
+}
+
+.direct-manipulation-card strong {
+  color: #f2dfaa;
+}
+
+.project-stats .drag-stat {
+  color: #f4daa0;
+  border-color: #69572e;
+  background: #211c11;
+}
+
+.drag-mode-chip {
+  display: inline-block;
+  max-width: min(440px, 74vw);
+  padding: 7px 10px;
+  border: 1px solid #80682f;
+  border-radius: 999px;
+  color: #ffe3a1;
+  background: rgba(31, 25, 12, 0.92);
+  font-size: 0.72rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drag-badge {
+  display: inline-block;
+  padding: 3px 7px;
+  border: 1px solid #7a6532;
+  border-radius: 999px;
+  color: #ffe3a1;
+  background: #211b10;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.drag-instruction {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid #5f512f;
+  border-radius: 9px;
+  background: #18160f;
+}
+
+.drag-instruction strong {
+  color: #f2dfaa;
+  font-size: 0.78rem;
+}
+
+.drag-instruction p {
+  margin: 4px 0 0;
+  color: #9d957f;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.drag-handle-swatch {
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  border: 2px solid #f1c76a;
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgba(241, 199, 106, 0.42);
+}
+
+.dragging-finish .viewport {
+  box-shadow: inset 0 0 0 1px rgba(241, 199, 106, 0.24);
+}
+
+.dragging-finish .viewport-caption {
+  opacity: 0.5;
+}
+
+.scenario-actions button:disabled,
+.scenario-editor button:disabled,
+.scenario-editor input:disabled,
+.secondary-action:disabled,
+.quiet-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
