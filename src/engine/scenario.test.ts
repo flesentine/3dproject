@@ -120,6 +120,19 @@ describe('scenario propagation', () => {
     })
   })
 
+  it('rejects a whole-task move that secretly changes duration', () => {
+    const result = simulateTaskEdit(auroraProject, 'sensor-firmware', {
+      kind: 'shift',
+      start: '2026-09-07',
+      finish: '2026-09-18',
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Whole-task movement must preserve the activity working-day duration.',
+    })
+  })
+
   it('does not pull successors earlier when a whole task shifts earlier', () => {
     const scenario = expectScenario(
       simulateTaskEdit(auroraProject, 'sensor-firmware', {
