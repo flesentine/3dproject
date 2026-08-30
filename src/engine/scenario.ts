@@ -4,10 +4,16 @@ import type {
   ISODate,
   ProjectModel,
   ProjectTask,
+  ScenarioEditKind,
   ScenarioResult,
   ScenarioTaskChange,
 } from '../domain/project'
 import { scheduleEngine } from './schedule'
+
+export type TaskScenarioEdit =
+  | { kind: 'finish'; finish: ISODate }
+  | { kind: 'start'; start: ISODate }
+  | { kind: 'shift'; start: ISODate; finish: ISODate }
 
 function durationWorkdays(task: ProjectTask): number {
   if (task.kind === 'milestone') return 0
@@ -114,29 +120,64 @@ function buildChanges(base: ProjectModel, scenario: ProjectModel, sourceTaskId: 
   })
 }
 
-export function simulateFinishChange(
+function validWeekday(value: ISODate): boolean {
+  try {
+    return isWorkingDay(parseISODate(value))
+  } catch {
+    return false
+  }
+}
+
+function requestedRange(source: ProjectTask, edit: TaskScenarioEdit): {
+  kind: ScenarioEditKind
+  start: ISODate
+  finish: ISODate
+} | { error: string } {
+  if (edit.kind === 'finish') {
+    if (!validWeekday(edit.finish)) return { error: 'Choose a valid weekday finish date.' }
+    if (source.kind !== 'milestone' && compareISODate(edit.finish, source.start) < 0) {
+      return { error: 'Finish cannot be earlier than the activity start.' }
+    }
+    return {
+      kind: 'finish',
+      start: source.kind === 'milestone' ? edit.finish : source.start,
+      finish: edit.finish,
+    }
+  }
+
+  if (edit.kind === 'start') {
+    if (source.kind !== 'task') return { error: 'Only normal tasks have a draggable start edge.' }
+    if (!validWeekday(edit.start)) return { error: 'Choose a valid weekday start date.' }
+    if (compareISODate(edit.start, source.finish) > 0) {
+      return { error: 'Start cannot be later than the activity finish.' }
+    }
+    return { kind: 'start', start: edit.start, finish: source.finish }
+  }
+
+  if (!validWeekday(edit.start) || !validWeekday(edit.finish)) {
+    return { error: 'Shifted tasks must start and finish on weekdays.' }
+  }
+  if (compareISODate(edit.finish, edit.start) < 0) {
+    return { error: 'Shifted task finish cannot be earlier than its start.' }
+  }
+  if (source.kind === 'milestone' && edit.start !== edit.finish) {
+    return { error: 'A milestone shift must keep start and finish together.' }
+  }
+
+  return { kind: 'shift', start: edit.start, finish: edit.finish }
+}
+
+export function simulateTaskEdit(
   project: ProjectModel,
   taskId: string,
-  requestedFinish: ISODate,
+  edit: TaskScenarioEdit,
 ): ScenarioResult {
   const source = project.tasks.find((task) => task.id === taskId)
   if (!source) return { ok: false, message: 'The selected activity no longer exists.' }
-  if (source.kind === 'summary') return { ok: false, message: 'Summary activities cannot be edited in Build 2 scenarios.' }
+  if (source.kind === 'summary') return { ok: false, message: 'Summary activities cannot be edited in scenarios.' }
 
-  let finishDate: Date
-  try {
-    finishDate = parseISODate(requestedFinish)
-  } catch {
-    return { ok: false, message: 'Choose a valid finish date.' }
-  }
-
-  if (!isWorkingDay(finishDate)) {
-    return { ok: false, message: 'Build 2 scenarios use a Monday–Friday calendar. Choose a weekday finish.' }
-  }
-
-  if (source.kind !== 'milestone' && compareISODate(requestedFinish, source.start) < 0) {
-    return { ok: false, message: 'Finish cannot be earlier than the activity start.' }
-  }
+  const range = requestedRange(source, edit)
+  if ('error' in range) return { ok: false, message: range.error }
 
   const baseAnalysis = scheduleEngine.analyze(project)
   if (baseAnalysis.validationIssues.some((issue) => issue.code === 'DEPENDENCY_CYCLE')) {
@@ -157,13 +198,8 @@ export function simulateFinishChange(
 
   const sourceScenario = scenarioTaskById.get(taskId)
   if (!sourceScenario) return { ok: false, message: 'The selected activity could not be loaded.' }
-
-  if (sourceScenario.kind === 'milestone') {
-    sourceScenario.start = requestedFinish
-    sourceScenario.finish = requestedFinish
-  } else {
-    sourceScenario.finish = requestedFinish
-  }
+  sourceScenario.start = range.start
+  sourceScenario.finish = range.finish
 
   const downstream = new Set(scheduleEngine.getDownstream(project, taskId))
 
@@ -209,10 +245,20 @@ export function simulateFinishChange(
     ok: true,
     scenario: {
       sourceTaskId: taskId,
-      requestedFinish,
+      editKind: range.kind,
+      requestedStart: range.start,
+      requestedFinish: range.finish,
       project: scenarioProject,
       analysis,
       changes,
     },
   }
+}
+
+export function simulateFinishChange(
+  project: ProjectModel,
+  taskId: string,
+  requestedFinish: ISODate,
+): ScenarioResult {
+  return simulateTaskEdit(project, taskId, { kind: 'finish', finish: requestedFinish })
 }
