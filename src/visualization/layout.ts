@@ -1,5 +1,5 @@
 import { differenceInDays } from '../domain/dates'
-import type { ProjectModel, ProjectTask, Workstream } from '../domain/project'
+import type { ISODate, ProjectModel, ProjectTask, Workstream } from '../domain/project'
 
 export const WORLD_SCALE = {
   day: 0.38,
@@ -28,7 +28,14 @@ export interface WorldLayout {
   finishZ: number
 }
 
-export function buildWorldLayout(project: ProjectModel): WorldLayout {
+export function getProjectStart(project: ProjectModel): ISODate {
+  return project.tasks.reduce(
+    (earliest, task) => (task.start < earliest ? task.start : earliest),
+    project.tasks[0]?.start ?? project.statusDate,
+  )
+}
+
+export function buildWorldLayout(project: ProjectModel, anchorStart?: ISODate): WorldLayout {
   const orderedWorkstreams = [...project.workstreams].sort((a, b) => a.order - b.order)
   const midpoint = (orderedWorkstreams.length - 1) / 2
   const laneX = new Map<string, number>()
@@ -39,10 +46,7 @@ export function buildWorldLayout(project: ProjectModel): WorldLayout {
     return { workstream, x }
   })
 
-  const projectStart = project.tasks.reduce(
-    (earliest, task) => (task.start < earliest ? task.start : earliest),
-    project.tasks[0]?.start ?? project.statusDate,
-  )
+  const projectStart = anchorStart ?? getProjectStart(project)
 
   const projectFinish = project.tasks.reduce(
     (latest, task) => (task.finish > latest ? task.finish : latest),
