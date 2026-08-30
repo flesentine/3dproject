@@ -1,7 +1,8 @@
 import type { ProjectModel } from '../domain/project'
+import { getTasksForWorkPackage, getWorkPackage } from '../hierarchy/hierarchy'
 import type { WorldLayout } from '../visualization/layout'
 
-export type NavigationKind = 'overview' | 'today' | 'workstream' | 'task'
+export type NavigationKind = 'overview' | 'today' | 'workstream' | 'workPackage' | 'task'
 
 export interface NavigationRequest {
   id: number
@@ -23,11 +24,20 @@ export type ProjectSearchResult =
       score: number
     }
   | {
+      kind: 'workPackage'
+      id: string
+      label: string
+      detail: string
+      workstreamId: string
+      score: number
+    }
+  | {
       kind: 'task'
       id: string
       label: string
       detail: string
       workstreamId: string
+      workPackageId?: string
       score: number
     }
 
@@ -45,6 +55,7 @@ export function searchProject(project: ProjectModel, rawQuery: string, limit = 8
   if (!query) return []
 
   const workstreamById = new Map(project.workstreams.map((workstream) => [workstream.id, workstream]))
+  const workPackageById = new Map((project.workPackages ?? []).map((workPackage) => [workPackage.id, workPackage]))
   const results: ProjectSearchResult[] = []
 
   for (const workstream of project.workstreams) {
@@ -60,20 +71,36 @@ export function searchProject(project: ProjectModel, rawQuery: string, limit = 8
     }
   }
 
+  for (const workPackage of project.workPackages ?? []) {
+    const score = textScore(workPackage.name, query)
+    if (score <= 0) continue
+    results.push({
+      kind: 'workPackage',
+      id: workPackage.id,
+      label: workPackage.name,
+      detail: `Work package · ${workstreamById.get(workPackage.workstreamId)?.name ?? 'Unknown workstream'}`,
+      workstreamId: workPackage.workstreamId,
+      score: score + 8,
+    })
+  }
+
   for (const task of project.tasks) {
     const nameScore = textScore(task.name, query)
     const ownerScore = textScore(task.owner, query)
     const workstream = workstreamById.get(task.workstreamId)
+    const workPackage = task.workPackageId ? workPackageById.get(task.workPackageId) : undefined
     const workstreamScore = textScore(workstream?.name, query)
-    const score = Math.max(nameScore, ownerScore - 5, workstreamScore - 15)
+    const workPackageScore = textScore(workPackage?.name, query)
+    const score = Math.max(nameScore, ownerScore - 5, workPackageScore - 10, workstreamScore - 15)
     if (score <= 0) continue
 
     results.push({
       kind: 'task',
       id: task.id,
       label: task.name,
-      detail: `${task.kind} · ${workstream?.name ?? 'Unknown workstream'}${task.owner ? ` · ${task.owner}` : ''}`,
+      detail: `${task.kind} · ${workstream?.name ?? 'Unknown workstream'}${workPackage ? ` / ${workPackage.name}` : ''}${task.owner ? ` · ${task.owner}` : ''}`,
       workstreamId: task.workstreamId,
+      workPackageId: task.workPackageId,
       score: score + (task.kind === 'milestone' ? 4 : 0),
     })
   }
@@ -81,6 +108,18 @@ export function searchProject(project: ProjectModel, rawQuery: string, limit = 8
   return results
     .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label))
     .slice(0, limit)
+}
+
+function frameVisuals(layout: WorldLayout, visuals: WorldLayout['tasks'], x: number, distanceScale: number): NavigationFrame | null {
+  if (visuals.length === 0) return null
+  const minZ = Math.min(...visuals.map((visual) => visual.position[2] - visual.size[2] / 2))
+  const maxZ = Math.max(...visuals.map((visual) => visual.position[2] + visual.size[2] / 2))
+  const centerZ = (minZ + maxZ) / 2
+  const span = Math.max(4, maxZ - minZ)
+  return {
+    target: [x, 0.75, centerZ],
+    position: [x + 7.5 * distanceScale, 6.2 * distanceScale, centerZ - Math.min(20, span * 0.32 + 7) * distanceScale],
+  }
 }
 
 export function getNavigationFrame(
@@ -108,19 +147,22 @@ export function getNavigationFrame(
     }
   }
 
+  if (request.kind === 'workPackage' && request.targetId) {
+    const workPackage = getWorkPackage(project, request.targetId)
+    if (workPackage) {
+      const lane = layout.lanes.find((candidate) => candidate.workstream.id === workPackage.workstreamId)
+      const taskIds = new Set(getTasksForWorkPackage(project, workPackage.id).map((task) => task.id))
+      const visuals = layout.tasks.filter((visual) => taskIds.has(visual.task.id))
+      const frame = lane ? frameVisuals(layout, visuals, lane.x, 0.72) : null
+      if (frame) return frame
+    }
+  }
+
   if (request.kind === 'workstream' && request.targetId) {
     const lane = layout.lanes.find((candidate) => candidate.workstream.id === request.targetId)
     const visuals = layout.tasks.filter((visual) => visual.task.workstreamId === request.targetId)
-    if (lane && visuals.length > 0) {
-      const minZ = Math.min(...visuals.map((visual) => visual.position[2] - visual.size[2] / 2))
-      const maxZ = Math.max(...visuals.map((visual) => visual.position[2] + visual.size[2] / 2))
-      const centerZ = (minZ + maxZ) / 2
-      const span = Math.max(12, maxZ - minZ)
-      return {
-        target: [lane.x, 0.7, centerZ],
-        position: [lane.x + 10, 8.5, centerZ - Math.min(22, span * 0.35 + 9)],
-      }
-    }
+    const frame = lane ? frameVisuals(layout, visuals, lane.x, 1) : null
+    if (frame) return frame
   }
 
   const width = Math.max(18, project.workstreams.length * 4.2)
