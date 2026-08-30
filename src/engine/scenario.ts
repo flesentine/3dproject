@@ -163,6 +163,12 @@ function requestedRange(source: ProjectTask, edit: TaskScenarioEdit): {
   if (source.kind === 'milestone' && edit.start !== edit.finish) {
     return { error: 'A milestone shift must keep start and finish together.' }
   }
+  if (source.kind === 'task') {
+    const shiftedDuration = Math.max(1, workingDaysInclusive(edit.start, edit.finish))
+    if (shiftedDuration !== durationWorkdays(source)) {
+      return { error: 'Whole-task movement must preserve the activity working-day duration.' }
+    }
+  }
 
   return { kind: 'shift', start: edit.start, finish: edit.finish }
 }
