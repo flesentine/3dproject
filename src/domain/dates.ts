@@ -40,6 +40,16 @@ export function maxISODate(values: ISODate[]): ISODate {
   return [...values].sort(compareISODate).at(-1) as ISODate
 }
 
+export function addCalendarDays(value: ISODate, days: number): ISODate {
+  if (!Number.isInteger(days)) {
+    throw new Error(`Calendar-day offset must be an integer: ${days}`)
+  }
+
+  const cursor = parseISODate(value)
+  cursor.setUTCDate(cursor.getUTCDate() + days)
+  return formatISODate(cursor)
+}
+
 export function isWorkingDay(value: Date): boolean {
   const day = value.getUTCDay()
   return day !== 0 && day !== 6
