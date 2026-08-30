@@ -15,6 +15,12 @@ describe('project navigation', () => {
     expect(results.some((result) => result.kind === 'workstream' && result.label === 'Validation')).toBe(true)
   })
 
+  it('finds work packages as first-class navigation targets', () => {
+    const results = searchProject(auroraProject, 'system qualification')
+    expect(results[0]?.kind).toBe('workPackage')
+    expect(results[0]?.label).toBe('System Qualification')
+  })
+
   it('frames Today at the stable time origin', () => {
     const layout = buildWorldLayout(auroraProject)
     const frame = getNavigationFrame(auroraProject, layout, { kind: 'today' })
@@ -27,6 +33,16 @@ describe('project navigation', () => {
     const lane = layout.lanes.find((candidate) => candidate.workstream.id === workstream.id)
     const frame = getNavigationFrame(auroraProject, layout, { kind: 'workstream', targetId: workstream.id })
     expect(frame.target[0]).toBeCloseTo(lane?.x ?? 0)
+  })
+
+  it('frames a work package around only its member activities', () => {
+    const layout = buildWorldLayout(auroraProject)
+    const workPackage = auroraProject.workPackages?.find((candidate) => candidate.id === 'embedded-release')
+    expect(workPackage).toBeTruthy()
+    const lane = layout.lanes.find((candidate) => candidate.workstream.id === workPackage?.workstreamId)
+    const frame = getNavigationFrame(auroraProject, layout, { kind: 'workPackage', targetId: workPackage?.id })
+    expect(frame.target[0]).toBeCloseTo(lane?.x ?? 0)
+    expect(frame.position[1]).toBeLessThan(8.5)
   })
 
   it('frames a task around its actual visual position', () => {
