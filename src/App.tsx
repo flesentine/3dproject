@@ -2,6 +2,11 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useMemo, useState } from 'react'
 import { addWorkingDays } from './domain/dates'
 import { scheduleEngine } from './engine/schedule'
+import {
+  getWorkPackage,
+  getWorkPackageForTask,
+  getWorkPackagesForWorkstream,
+} from './hierarchy/hierarchy'
 import { searchProject, type ProjectSearchResult } from './navigation/navigation'
 import { ProjectWorld } from './scene/ProjectWorld'
 import { useProjectStore, type AnalysisMode } from './state/useProjectStore'
@@ -29,11 +34,13 @@ export default function App() {
   const finishDrag = useProjectStore((state) => state.finishDrag)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const focusedWorkstreamId = useProjectStore((state) => state.focusedWorkstreamId)
+  const focusedWorkPackageId = useProjectStore((state) => state.focusedWorkPackageId)
   const analysisMode = useProjectStore((state) => state.analysisMode)
   const selectTask = useProjectStore((state) => state.selectTask)
   const setAnalysisMode = useProjectStore((state) => state.setAnalysisMode)
   const focusTask = useProjectStore((state) => state.focusTask)
   const focusWorkstream = useProjectStore((state) => state.focusWorkstream)
+  const focusWorkPackage = useProjectStore((state) => state.focusWorkPackage)
   const goToday = useProjectStore((state) => state.goToday)
   const goOverview = useProjectStore((state) => state.goOverview)
   const previewFinishScenario = useProjectStore((state) => state.previewFinishScenario)
@@ -48,6 +55,8 @@ export default function App() {
   const selectedTask = displayProject.tasks.find((task) => task.id === selectedTaskId) ?? null
   const baseSelectedTask = project.tasks.find((task) => task.id === selectedTaskId) ?? null
   const selectedWorkstream = project.workstreams.find((workstream) => workstream.id === focusedWorkstreamId) ?? null
+  const selectedWorkPackage = getWorkPackage(project, focusedWorkPackageId)
+  const selectedTaskWorkPackage = getWorkPackageForTask(project, baseSelectedTask)
   const selectedMetrics = selectedTask ? analysis.activityByTask.get(selectedTask.id) : undefined
   const upstream = selectedTask ? scheduleEngine.getUpstream(displayProject, selectedTask.id) : []
   const downstream = selectedTask ? scheduleEngine.getDownstream(displayProject, selectedTask.id) : []
@@ -74,6 +83,20 @@ export default function App() {
     return counts
   }, [displayProject.tasks])
 
+  const taskCountByWorkPackage = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const task of displayProject.tasks) {
+      if (!task.workPackageId) continue
+      counts.set(task.workPackageId, (counts.get(task.workPackageId) ?? 0) + 1)
+    }
+    return counts
+  }, [displayProject.tasks])
+
+  const visibleWorkPackages = useMemo(
+    () => selectedWorkstream ? getWorkPackagesForWorkstream(project, selectedWorkstream.id) : [],
+    [project, selectedWorkstream],
+  )
+
   useEffect(() => {
     if (!baseSelectedTask) {
       setScenarioFinish('')
@@ -95,6 +118,7 @@ export default function App() {
 
   const chooseSearchResult = (result: ProjectSearchResult) => {
     if (result.kind === 'task') focusTask(result.id)
+    else if (result.kind === 'workPackage') focusWorkPackage(result.id)
     else focusWorkstream(result.id)
     setSearchQuery('')
   }
@@ -103,7 +127,7 @@ export default function App() {
     <main className={finishDrag ? 'app-shell dragging-finish' : 'app-shell'}>
       <header className="topbar navigation-topbar">
         <div className="project-title-block">
-          <p className="eyebrow">BUILD 4 · NAVIGATION + SEMANTIC ZOOM</p>
+          <p className="eyebrow">BUILD 5 · HIERARCHICAL SEMANTIC ZOOM</p>
           <h1>{project.name}</h1>
         </div>
 
@@ -115,6 +139,14 @@ export default function App() {
                 <span>/</span>
                 <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={Boolean(finishDrag)}>
                   {selectedWorkstream.name}
+                </button>
+              </>
+            )}
+            {selectedWorkPackage && (
+              <>
+                <span>/</span>
+                <button type="button" onClick={() => focusWorkPackage(selectedWorkPackage.id)} disabled={Boolean(finishDrag)}>
+                  {selectedWorkPackage.name}
                 </button>
               </>
             )}
@@ -131,7 +163,7 @@ export default function App() {
           <div className="project-search" role="search">
             <input
               type="search"
-              placeholder="Search tasks, milestones, owners…"
+              placeholder="Search packages, tasks, milestones, owners…"
               value={searchQuery}
               disabled={Boolean(finishDrag)}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -150,7 +182,7 @@ export default function App() {
                     onClick={() => chooseSearchResult(result)}
                     role="option"
                   >
-                    <span className="search-result-kind">{result.kind}</span>
+                    <span className="search-result-kind">{result.kind === 'workPackage' ? 'package' : result.kind}</span>
                     <span className="search-result-copy">
                       <strong>{result.label}</strong>
                       <small>{result.detail}</small>
@@ -171,9 +203,12 @@ export default function App() {
 
         <div className="project-stats" aria-label="Project model summary">
           <span>{project.workstreams.length} workstreams</span>
+          <span>{project.workPackages?.length ?? 0} packages</span>
           <span>{project.tasks.length} activities</span>
           <span>{analysis.criticalTaskIds.length} critical</span>
-          {selectedWorkstream && <span className="focus-stat">focused · {selectedWorkstream.name}</span>}
+          {selectedWorkPackage
+            ? <span className="focus-stat">package · {selectedWorkPackage.name}</span>
+            : selectedWorkstream && <span className="focus-stat">workstream · {selectedWorkstream.name}</span>}
           {finishDrag && <span className="drag-stat">dragging → {finishDrag.finish}</span>}
           {scenario && <span className="scenario-stat">scenario · {scenario.changes.length} changed</span>}
         </div>
@@ -181,10 +216,10 @@ export default function App() {
 
       <section className="workspace">
         <aside className="context-panel" aria-label="Project orientation and analysis controls">
-          <p className="panel-label">Navigation</p>
-          <h2>{selectedWorkstream ? selectedWorkstream.name : 'Project map'}</h2>
+          <p className="panel-label">Hierarchy</p>
+          <h2>{selectedWorkPackage?.name ?? selectedWorkstream?.name ?? 'Project map'}</h2>
           <p className="panel-copy">
-            Search or choose a workstream to fly there. Semantic zoom fades unrelated work without changing the geography you already learned.
+            Dive Project → Workstream → Work Package → Task. Each level reveals more detail while every schedule object keeps the same physical location.
           </p>
 
           <div className="workstream-nav" aria-label="Workstream navigation">
@@ -206,12 +241,36 @@ export default function App() {
             ))}
           </div>
 
+          {selectedWorkstream && (
+            <div className="package-nav" aria-label={`${selectedWorkstream.name} work packages`}>
+              <div className="workstream-nav-heading">
+                <span className="control-title">Work packages</span>
+                {selectedWorkPackage && (
+                  <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={Boolean(finishDrag)}>Up</button>
+                )}
+              </div>
+              {visibleWorkPackages.map((workPackage) => (
+                <button
+                  type="button"
+                  key={workPackage.id}
+                  className={focusedWorkPackageId === workPackage.id ? 'package-button active' : 'package-button'}
+                  onClick={() => focusWorkPackage(workPackage.id)}
+                  disabled={Boolean(finishDrag)}
+                >
+                  <span>{workPackage.name}</span>
+                  <small>{taskCountByWorkPackage.get(workPackage.id) ?? 0} activities</small>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="navigation-hint-card">
             <span className="control-title">In the world</span>
-            <strong>Double-click = fly to</strong>
-            <span>Task → focus task</span>
-            <span>Lane / label → enter workstream</span>
-            <span>Double-click Today plane → return home</span>
+            <strong>Double-click = dive in</strong>
+            <span>Lane / label → workstream</span>
+            <span>Package volume / label → work package</span>
+            <span>Task → activity</span>
+            <span>Breadcrumb → one level back out</span>
           </div>
 
           <div className="analysis-controls" aria-label="Schedule analysis mode">
@@ -231,10 +290,11 @@ export default function App() {
               ))}
             </div>
             <p className="mode-description">
-              {analysisMode === 'critical' && 'Critical analysis can reveal controlling work outside the focused lane.'}
+              {analysisMode === 'critical' && 'Critical analysis temporarily cuts across hierarchy to reveal the controlling network.'}
               {analysisMode === 'drivers' && selectedTask && `Showing the chain that controls ${selectedTask.name}.`}
-              {analysisMode === 'normal' && selectedWorkstream && `Semantic focus is isolating ${selectedWorkstream.name}.`}
-              {analysisMode === 'normal' && !selectedWorkstream && 'All workstreams are visible in stable project geography.'}
+              {analysisMode === 'normal' && selectedWorkPackage && `Detail level: ${selectedWorkPackage.name}. Sibling packages are still present but quiet.`}
+              {analysisMode === 'normal' && !selectedWorkPackage && selectedWorkstream && `Package boundaries are now visible inside ${selectedWorkstream.name}.`}
+              {analysisMode === 'normal' && !selectedWorkstream && 'Overview shows stable workstream geography. Dive in to reveal package structure.'}
             </p>
           </div>
 
@@ -284,7 +344,9 @@ export default function App() {
             />
           </Canvas>
           <div className="viewport-mode" aria-live="polite">
-            {selectedWorkstream && <span className="focus-mode-chip">Focused · {selectedWorkstream.name}</span>}
+            {selectedWorkPackage
+              ? <span className="package-mode-chip">Package · {selectedWorkPackage.name}</span>
+              : selectedWorkstream && <span className="focus-mode-chip">Workstream · {selectedWorkstream.name}</span>}
             {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
             {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
             {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
@@ -309,6 +371,7 @@ export default function App() {
               <h2>{selectedTask.name}</h2>
               <div className="task-badges">
                 <span className="task-kind">{selectedTask.kind}</span>
+                {selectedTaskWorkPackage && <span className="hierarchy-badge">{selectedTaskWorkPackage.name}</span>}
                 {selectedMetrics?.isCritical && <span className="critical-badge">Critical</span>}
                 {selectedScenarioChange && <span className="scenario-badge">Scenario moved</span>}
                 {finishDrag?.taskId === selectedTask.id && <span className="drag-badge">Dragging</span>}
@@ -320,7 +383,7 @@ export default function App() {
                 onClick={() => focusTask(selectedTask.id)}
                 disabled={Boolean(finishDrag)}
               >
-                Focus camera on this
+                Dive to this activity
               </button>
 
               <dl className="detail-list">
@@ -394,20 +457,22 @@ export default function App() {
               </button>
 
               <div className="foundation-note">
-                <strong>Build 4 navigation rule</strong>
+                <strong>Build 5 hierarchy rule</strong>
                 <p>
-                  Camera movement changes viewpoint, never project geography. Semantic focus fades unrelated lanes in Normal mode; Critical Path and Drivers can still surface cross-workstream context.
+                  Work packages are organizational metadata, not fake schedule activities. CPM and dependency math still operate only on real tasks and milestones.
                 </p>
               </div>
             </>
           ) : (
             <div className="empty-inspector">
               <p className="panel-label">Inspector</p>
-              <h2>{selectedWorkstream ? `${selectedWorkstream.name} focused` : 'Find your way in'}</h2>
+              <h2>{selectedWorkPackage ? `${selectedWorkPackage.name} opened` : selectedWorkstream ? `${selectedWorkstream.name} opened` : 'Enter the project'}</h2>
               <p>
-                {selectedWorkstream
-                  ? 'Task labels are now expanded inside this workstream. Select one or use search to fly directly to an activity.'
-                  : 'Search for a task, choose a workstream, or double-click something in the world to fly there.'}
+                {selectedWorkPackage
+                  ? 'This package is the current detail boundary. Its tasks are emphasized and labeled; sibling packages remain visible as quiet context.'
+                  : selectedWorkstream
+                    ? 'Work-package volumes are now visible. Double-click one to dive another level, or select a task directly.'
+                    : 'Choose a workstream, search for a package or task, or double-click the world to move down the hierarchy.'}
               </p>
             </div>
           )}
