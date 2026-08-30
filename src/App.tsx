@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useMemo, useState } from 'react'
 import { addWorkingDays } from './domain/dates'
 import { scheduleEngine } from './engine/schedule'
+import { searchProject, type ProjectSearchResult } from './navigation/navigation'
 import { ProjectWorld } from './scene/ProjectWorld'
 import { useProjectStore, type AnalysisMode } from './state/useProjectStore'
 
@@ -27,19 +28,26 @@ export default function App() {
   const scenarioError = useProjectStore((state) => state.scenarioError)
   const finishDrag = useProjectStore((state) => state.finishDrag)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
+  const focusedWorkstreamId = useProjectStore((state) => state.focusedWorkstreamId)
   const analysisMode = useProjectStore((state) => state.analysisMode)
   const selectTask = useProjectStore((state) => state.selectTask)
   const setAnalysisMode = useProjectStore((state) => state.setAnalysisMode)
+  const focusTask = useProjectStore((state) => state.focusTask)
+  const focusWorkstream = useProjectStore((state) => state.focusWorkstream)
+  const goToday = useProjectStore((state) => state.goToday)
+  const goOverview = useProjectStore((state) => state.goOverview)
   const previewFinishScenario = useProjectStore((state) => state.previewFinishScenario)
   const applyScenario = useProjectStore((state) => state.applyScenario)
   const resetScenario = useProjectStore((state) => state.resetScenario)
   const [scenarioFinish, setScenarioFinish] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const displayProject = scenario?.project ?? project
   const baselineAnalysis = useMemo(() => scheduleEngine.analyze(project), [project])
   const analysis = scenario?.analysis ?? baselineAnalysis
   const selectedTask = displayProject.tasks.find((task) => task.id === selectedTaskId) ?? null
   const baseSelectedTask = project.tasks.find((task) => task.id === selectedTaskId) ?? null
+  const selectedWorkstream = project.workstreams.find((workstream) => workstream.id === focusedWorkstreamId) ?? null
   const selectedMetrics = selectedTask ? analysis.activityByTask.get(selectedTask.id) : undefined
   const upstream = selectedTask ? scheduleEngine.getUpstream(displayProject, selectedTask.id) : []
   const downstream = selectedTask ? scheduleEngine.getDownstream(displayProject, selectedTask.id) : []
@@ -53,6 +61,18 @@ export default function App() {
       : { targetTaskId: '', taskIds: [], dependencyIds: [] },
     [displayProject, selectedTask],
   )
+  const searchResults = useMemo(
+    () => searchProject(displayProject, searchQuery),
+    [displayProject, searchQuery],
+  )
+
+  const taskCountByWorkstream = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const task of displayProject.tasks) {
+      counts.set(task.workstreamId, (counts.get(task.workstreamId) ?? 0) + 1)
+    }
+    return counts
+  }, [displayProject.tasks])
 
   useEffect(() => {
     if (!baseSelectedTask) {
@@ -73,40 +93,125 @@ export default function App() {
     previewFinishScenario(baseSelectedTask.id, finish)
   }
 
+  const chooseSearchResult = (result: ProjectSearchResult) => {
+    if (result.kind === 'task') focusTask(result.id)
+    else focusWorkstream(result.id)
+    setSearchQuery('')
+  }
+
   return (
     <main className={finishDrag ? 'app-shell dragging-finish' : 'app-shell'}>
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">BUILD 3 · DIRECT MANIPULATION</p>
+      <header className="topbar navigation-topbar">
+        <div className="project-title-block">
+          <p className="eyebrow">BUILD 4 · NAVIGATION + SEMANTIC ZOOM</p>
           <h1>{project.name}</h1>
         </div>
+
+        <div className="navigation-center">
+          <nav className="breadcrumbs" aria-label="Project location">
+            <button type="button" onClick={goOverview} disabled={Boolean(finishDrag)}>{project.name}</button>
+            {selectedWorkstream && (
+              <>
+                <span>/</span>
+                <button type="button" onClick={() => focusWorkstream(selectedWorkstream.id)} disabled={Boolean(finishDrag)}>
+                  {selectedWorkstream.name}
+                </button>
+              </>
+            )}
+            {selectedTask && (
+              <>
+                <span>/</span>
+                <button type="button" onClick={() => focusTask(selectedTask.id)} disabled={Boolean(finishDrag)}>
+                  {selectedTask.name}
+                </button>
+              </>
+            )}
+          </nav>
+
+          <div className="project-search" role="search">
+            <input
+              type="search"
+              placeholder="Search tasks, milestones, owners…"
+              value={searchQuery}
+              disabled={Boolean(finishDrag)}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setSearchQuery('')
+                if (event.key === 'Enter' && searchResults[0]) chooseSearchResult(searchResults[0])
+              }}
+              aria-label="Search project"
+            />
+            {searchQuery.trim() && (
+              <div className="search-results" role="listbox" aria-label="Project search results">
+                {searchResults.length > 0 ? searchResults.map((result) => (
+                  <button
+                    type="button"
+                    key={`${result.kind}-${result.id}`}
+                    onClick={() => chooseSearchResult(result)}
+                    role="option"
+                  >
+                    <span className="search-result-kind">{result.kind}</span>
+                    <span className="search-result-copy">
+                      <strong>{result.label}</strong>
+                      <small>{result.detail}</small>
+                    </span>
+                  </button>
+                )) : (
+                  <p className="search-empty">No project matches</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="navigation-actions">
+            <button type="button" onClick={goOverview} disabled={Boolean(finishDrag)}>Overview</button>
+            <button type="button" className="today-button" onClick={goToday} disabled={Boolean(finishDrag)}>Today</button>
+          </div>
+        </div>
+
         <div className="project-stats" aria-label="Project model summary">
           <span>{project.workstreams.length} workstreams</span>
           <span>{project.tasks.length} activities</span>
           <span>{analysis.criticalTaskIds.length} critical</span>
-          <span>{analysis.networkSpanWorkdays} workday network</span>
+          {selectedWorkstream && <span className="focus-stat">focused · {selectedWorkstream.name}</span>}
           {finishDrag && <span className="drag-stat">dragging → {finishDrag.finish}</span>}
           {scenario && <span className="scenario-stat">scenario · {scenario.changes.length} changed</span>}
-          <span className={analysis.validationIssues.length === 0 ? 'healthy' : 'warning'}>
-            {analysis.validationIssues.length === 0 ? 'model valid' : `${analysis.validationIssues.length} model issues`}
-          </span>
         </div>
       </header>
 
       <section className="workspace">
         <aside className="context-panel" aria-label="Project orientation and analysis controls">
-          <p className="panel-label">Spatial schedule</p>
-          <h2>Grab the schedule</h2>
+          <p className="panel-label">Navigation</p>
+          <h2>{selectedWorkstream ? selectedWorkstream.name : 'Project map'}</h2>
           <p className="panel-copy">
-            Select a task, grab its finish handle, and drag through time. The same scenario engine continuously propagates only the additional downstream impact.
+            Search or choose a workstream to fly there. Semantic zoom fades unrelated work without changing the geography you already learned.
           </p>
 
-          <div className="direct-manipulation-card">
-            <span className="control-title">Direct edit</span>
-            <strong>1. Select a task</strong>
-            <span>2. Grab the gold finish handle</span>
-            <span>3. Drag forward or backward</span>
-            <span>4. Release → Apply or Reset</span>
+          <div className="workstream-nav" aria-label="Workstream navigation">
+            <div className="workstream-nav-heading">
+              <span className="control-title">Workstreams</span>
+              {selectedWorkstream && <button type="button" onClick={goOverview}>All</button>}
+            </div>
+            {project.workstreams.map((workstream) => (
+              <button
+                type="button"
+                key={workstream.id}
+                className={focusedWorkstreamId === workstream.id ? 'workstream-button active' : 'workstream-button'}
+                onClick={() => focusWorkstream(workstream.id)}
+                disabled={Boolean(finishDrag)}
+              >
+                <span>{workstream.name}</span>
+                <small>{taskCountByWorkstream.get(workstream.id) ?? 0}</small>
+              </button>
+            ))}
+          </div>
+
+          <div className="navigation-hint-card">
+            <span className="control-title">In the world</span>
+            <strong>Double-click = fly to</strong>
+            <span>Task → focus task</span>
+            <span>Lane / label → enter workstream</span>
+            <span>Double-click Today plane → return home</span>
           </div>
 
           <div className="analysis-controls" aria-label="Schedule analysis mode">
@@ -118,7 +223,7 @@ export default function App() {
                   type="button"
                   className={analysisMode === mode.id ? 'mode-button active' : 'mode-button'}
                   aria-pressed={analysisMode === mode.id}
-                  disabled={mode.id === 'drivers' && !selectedTask}
+                  disabled={Boolean(finishDrag) || (mode.id === 'drivers' && !selectedTask)}
                   onClick={() => setAnalysisMode(mode.id)}
                 >
                   {mode.label}
@@ -126,9 +231,10 @@ export default function App() {
               ))}
             </div>
             <p className="mode-description">
-              {analysisMode === 'critical' && 'Critical path is recalculated against the current preview.'}
+              {analysisMode === 'critical' && 'Critical analysis can reveal controlling work outside the focused lane.'}
               {analysisMode === 'drivers' && selectedTask && `Showing the chain that controls ${selectedTask.name}.`}
-              {analysisMode === 'normal' && 'Direct manipulation keeps geography fixed while dates and impacts change.'}
+              {analysisMode === 'normal' && selectedWorkstream && `Semantic focus is isolating ${selectedWorkstream.name}.`}
+              {analysisMode === 'normal' && !selectedWorkstream && 'All workstreams are visible in stable project geography.'}
             </p>
           </div>
 
@@ -138,22 +244,11 @@ export default function App() {
                 <span className="scenario-dot" />
                 <strong>{finishDrag ? 'Live drag preview' : 'Scenario active'}</strong>
               </div>
-              <p>
-                {scenarioSource?.name ?? 'Selected activity'} → {scenario.requestedFinish}
-              </p>
+              <p>{scenarioSource?.name ?? 'Selected activity'} → {scenario.requestedFinish}</p>
               <dl className="scenario-impact-list">
-                <div>
-                  <dt>Affected</dt>
-                  <dd>{scenario.changes.length} activities</dd>
-                </div>
-                <div>
-                  <dt>Plan finish</dt>
-                  <dd>{baselineAnalysis.dateRange.finish}</dd>
-                </div>
-                <div>
-                  <dt>Preview finish</dt>
-                  <dd>{analysis.dateRange.finish}</dd>
-                </div>
+                <div><dt>Affected</dt><dd>{scenario.changes.length} activities</dd></div>
+                <div><dt>Plan finish</dt><dd>{baselineAnalysis.dateRange.finish}</dd></div>
+                <div><dt>Preview finish</dt><dd>{analysis.dateRange.finish}</dd></div>
               </dl>
               <div className="scenario-actions">
                 <button type="button" className="apply-button" onClick={applyScenario} disabled={Boolean(finishDrag)}>Apply</button>
@@ -163,31 +258,11 @@ export default function App() {
           )}
 
           <dl className="compact-list">
-            <div>
-              <dt>Status date</dt>
-              <dd>{project.statusDate}</dd>
-            </div>
-            <div>
-              <dt>Plan start</dt>
-              <dd>{baselineAnalysis.dateRange.start}</dd>
-            </div>
-            <div>
-              <dt>Plan finish</dt>
-              <dd>{baselineAnalysis.dateRange.finish}</dd>
-            </div>
-            <div>
-              <dt>Visible finish</dt>
-              <dd>{analysis.dateRange.finish}</dd>
-            </div>
+            <div><dt>Status date</dt><dd>{project.statusDate}</dd></div>
+            <div><dt>Plan start</dt><dd>{baselineAnalysis.dateRange.start}</dd></div>
+            <div><dt>Plan finish</dt><dd>{baselineAnalysis.dateRange.finish}</dd></div>
+            <div><dt>Visible finish</dt><dd>{analysis.dateRange.finish}</dd></div>
           </dl>
-
-          <div className="control-hint">
-            <strong>Scenario language</strong>
-            <span>Gold handle = editable finish</span>
-            <span>Amber = moved in preview</span>
-            <span>Wireframe = committed position</span>
-            <span>Dashed trail = schedule movement</span>
-          </div>
         </aside>
 
         <div className="viewport" aria-label="3D project schedule viewport">
@@ -209,6 +284,7 @@ export default function App() {
             />
           </Canvas>
           <div className="viewport-mode" aria-live="polite">
+            {selectedWorkstream && <span className="focus-mode-chip">Focused · {selectedWorkstream.name}</span>}
             {finishDrag && <span className="drag-mode-chip">Dragging finish → {finishDrag.finish}</span>}
             {!finishDrag && scenario && <span className="scenario-mode-chip">Scenario · {scenario.changes.length} moved</span>}
             {analysisMode === 'critical' && <span className="critical-mode-chip">Critical path · {analysis.criticalTaskIds.length} activities</span>}
@@ -238,53 +314,34 @@ export default function App() {
                 {finishDrag?.taskId === selectedTask.id && <span className="drag-badge">Dragging</span>}
               </div>
 
+              <button
+                type="button"
+                className="focus-camera-action"
+                onClick={() => focusTask(selectedTask.id)}
+                disabled={Boolean(finishDrag)}
+              >
+                Focus camera on this
+              </button>
+
               <dl className="detail-list">
-                <div>
-                  <dt>Committed</dt>
-                  <dd>{baseSelectedTask.start} → {baseSelectedTask.finish}</dd>
-                </div>
+                <div><dt>Committed</dt><dd>{baseSelectedTask.start} → {baseSelectedTask.finish}</dd></div>
                 {selectedScenarioChange && (
                   <div className="scenario-row">
                     <dt>{finishDrag ? 'Live preview' : 'Scenario'}</dt>
                     <dd>{selectedTask.start} → {selectedTask.finish}</dd>
                   </div>
                 )}
-                <div>
-                  <dt>Duration</dt>
-                  <dd>{selectedMetrics ? `${selectedMetrics.durationWorkdays} workdays` : '—'}</dd>
-                </div>
-                <div>
-                  <dt>Progress</dt>
-                  <dd>{formatProgress(selectedTask.progress)}</dd>
-                </div>
-                <div>
-                  <dt>Owner</dt>
-                  <dd>{selectedTask.owner ?? 'Unassigned'}</dd>
-                </div>
+                <div><dt>Duration</dt><dd>{selectedMetrics ? `${selectedMetrics.durationWorkdays} workdays` : '—'}</dd></div>
+                <div><dt>Progress</dt><dd>{formatProgress(selectedTask.progress)}</dd></div>
+                <div><dt>Owner</dt><dd>{selectedTask.owner ?? 'Unassigned'}</dd></div>
                 <div className={selectedMetrics?.isCritical ? 'critical-row' : undefined}>
-                  <dt>Total float</dt>
-                  <dd>{formatFloat(selectedMetrics?.totalFloatDays)}</dd>
+                  <dt>Total float</dt><dd>{formatFloat(selectedMetrics?.totalFloatDays)}</dd>
                 </div>
-                <div>
-                  <dt>CPM early</dt>
-                  <dd>{selectedMetrics ? `${selectedMetrics.earlyStart} → ${selectedMetrics.earlyFinish}` : '—'}</dd>
-                </div>
-                <div>
-                  <dt>CPM late</dt>
-                  <dd>{selectedMetrics ? `${selectedMetrics.lateStart} → ${selectedMetrics.lateFinish}` : '—'}</dd>
-                </div>
-                <div>
-                  <dt>All upstream</dt>
-                  <dd>{upstream.length}</dd>
-                </div>
-                <div>
-                  <dt>All downstream</dt>
-                  <dd>{downstream.length}</dd>
-                </div>
-                <div>
-                  <dt>Driving chain</dt>
-                  <dd>{Math.max(0, drivers.taskIds.length - 1)} predecessors</dd>
-                </div>
+                <div><dt>CPM early</dt><dd>{selectedMetrics ? `${selectedMetrics.earlyStart} → ${selectedMetrics.earlyFinish}` : '—'}</dd></div>
+                <div><dt>CPM late</dt><dd>{selectedMetrics ? `${selectedMetrics.lateStart} → ${selectedMetrics.lateFinish}` : '—'}</dd></div>
+                <div><dt>All upstream</dt><dd>{upstream.length}</dd></div>
+                <div><dt>All downstream</dt><dd>{downstream.length}</dd></div>
+                <div><dt>Driving chain</dt><dd>{Math.max(0, drivers.taskIds.length - 1)} predecessors</dd></div>
               </dl>
 
               {baseSelectedTask.kind === 'task' && (
@@ -337,17 +394,21 @@ export default function App() {
               </button>
 
               <div className="foundation-note">
-                <strong>Build 3 direct manipulation</strong>
+                <strong>Build 4 navigation rule</strong>
                 <p>
-                  Dragging edits only the selected task’s finish along the time axis. Release keeps a reversible scenario preview; Apply commits it in memory and Reset discards it.
+                  Camera movement changes viewpoint, never project geography. Semantic focus fades unrelated lanes in Normal mode; Critical Path and Drivers can still surface cross-workstream context.
                 </p>
               </div>
             </>
           ) : (
             <div className="empty-inspector">
               <p className="panel-label">Inspector</p>
-              <h2>Select a task</h2>
-              <p>Choose a normal task to reveal its finish handle, then drag the handle through time to preview schedule impact directly in the 3D world.</p>
+              <h2>{selectedWorkstream ? `${selectedWorkstream.name} focused` : 'Find your way in'}</h2>
+              <p>
+                {selectedWorkstream
+                  ? 'Task labels are now expanded inside this workstream. Select one or use search to fly directly to an activity.'
+                  : 'Search for a task, choose a workstream, or double-click something in the world to fly there.'}
+              </p>
             </div>
           )}
         </aside>
