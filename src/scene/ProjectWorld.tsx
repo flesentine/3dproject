@@ -1,6 +1,6 @@
-import { useFrame } from '@react-three/fiber'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DoubleSide, Group, Vector3 } from 'three'
 import type {
   DriverAnalysis,
@@ -9,6 +9,7 @@ import type {
   ScheduleAnalysis,
 } from '../domain/project'
 import { useProjectStore } from '../state/useProjectStore'
+import { finishDateFromWorldZ } from '../visualization/finishDrag'
 import { buildWorldLayout, type TaskVisual } from '../visualization/layout'
 
 const workstreamColors = [
@@ -24,6 +25,7 @@ const criticalColor = '#ff816f'
 const driverColor = '#9bc6f5'
 const scenarioColor = '#f1c76a'
 const ghostColor = '#8a98aa'
+const dragHandleColor = '#f5d98c'
 
 interface ProjectWorldProps {
   project: ProjectModel
@@ -39,13 +41,23 @@ interface TaskBlockProps {
   analysis: ScheduleAnalysis
   driverTaskIds: Set<string>
   scenarioChangedTaskIds: Set<string>
+  onBeginFinishDrag: (taskId: string) => void
 }
 
-function TaskBlock({ visual, color, analysis, driverTaskIds, scenarioChangedTaskIds }: TaskBlockProps) {
+function TaskBlock({
+  visual,
+  color,
+  analysis,
+  driverTaskIds,
+  scenarioChangedTaskIds,
+  onBeginFinishDrag,
+}: TaskBlockProps) {
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
   const analysisMode = useProjectStore((state) => state.analysisMode)
+  const finishDrag = useProjectStore((state) => state.finishDrag)
   const selectTask = useProjectStore((state) => state.selectTask)
   const [hovered, setHovered] = useState(false)
+  const [handleHovered, setHandleHovered] = useState(false)
   const groupRef = useRef<Group>(null)
   const initialized = useRef(false)
   const selected = selectedTaskId === visual.task.id
@@ -93,12 +105,12 @@ function TaskBlock({ visual, color, analysis, driverTaskIds, scenarioChangedTask
   })
 
   const pointerHandlers = {
-    onPointerEnter: (event: { stopPropagation: () => void }) => {
+    onPointerEnter: (event: ThreeEvent<PointerEvent>) => {
       event.stopPropagation()
       setHovered(true)
     },
     onPointerLeave: () => setHovered(false),
-    onClick: (event: { stopPropagation: () => void }) => {
+    onClick: (event: ThreeEvent<MouseEvent>) => {
       event.stopPropagation()
       selectTask(task.id)
     },
@@ -137,6 +149,7 @@ function TaskBlock({ visual, color, analysis, driverTaskIds, scenarioChangedTask
 
   const progressDepth = Math.max(0, Math.min(size[2], size[2] * task.progress))
   const progressZ = -size[2] / 2 + progressDepth / 2
+  const activelyDragging = finishDrag?.taskId === task.id
 
   return (
     <group ref={groupRef} {...pointerHandlers}>
@@ -169,9 +182,56 @@ function TaskBlock({ visual, color, analysis, driverTaskIds, scenarioChangedTask
       )}
 
       {selected && (
-        <Text position={[0, 1.05, 0]} fontSize={0.32} color="#ffffff" anchorX="center" anchorY="middle" maxWidth={3.4}>
-          {task.name}
-        </Text>
+        <>
+          <Text position={[0, 1.05, 0]} fontSize={0.32} color="#ffffff" anchorX="center" anchorY="middle" maxWidth={3.4}>
+            {task.name}
+          </Text>
+          <group position={[0, 0.05, size[2] / 2 + 0.12]}>
+            <Line
+              points={[[-size[0] * 0.46, 0, 0], [size[0] * 0.46, 0, 0]]}
+              color={dragHandleColor}
+              lineWidth={activelyDragging ? 3 : 1.8}
+              transparent
+              opacity={activelyDragging || handleHovered ? 1 : 0.72}
+            />
+            <mesh
+              scale={activelyDragging ? 1.28 : handleHovered ? 1.14 : 1}
+              onPointerEnter={(event) => {
+                event.stopPropagation()
+                setHandleHovered(true)
+                document.body.style.cursor = 'col-resize'
+              }}
+              onPointerLeave={() => {
+                setHandleHovered(false)
+                if (!activelyDragging) document.body.style.cursor = ''
+              }}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+                onBeginFinishDrag(task.id)
+              }}
+            >
+              <sphereGeometry args={[0.22, 16, 12]} />
+              <meshStandardMaterial
+                color={activelyDragging ? '#fff2c8' : dragHandleColor}
+                emissive={dragHandleColor}
+                emissiveIntensity={activelyDragging ? 0.65 : 0.28}
+                roughness={0.42}
+              />
+            </mesh>
+            {(handleHovered || activelyDragging) && (
+              <Text
+                position={[0, 0.72, 0]}
+                fontSize={0.25}
+                color="#ffe7a8"
+                anchorX="center"
+                anchorY="middle"
+                maxWidth={2.7}
+              >
+                {activelyDragging ? finishDrag.finish : 'DRAG FINISH'}
+              </Text>
+            )}
+          </group>
+        </>
       )}
     </group>
   )
@@ -306,6 +366,47 @@ function WorkstreamLabels({ project, visuals }: { project: ProjectModel; visuals
   )
 }
 
+function FinishDragSurface({ layout }: { layout: ReturnType<typeof buildWorldLayout> }) {
+  const finishDrag = useProjectStore((state) => state.finishDrag)
+  const committedProject = useProjectStore((state) => state.project)
+  const updateFinishDrag = useProjectStore((state) => state.updateFinishDrag)
+  const endFinishDrag = useProjectStore((state) => state.endFinishDrag)
+
+  if (!finishDrag) return null
+
+  const task = committedProject.tasks.find((candidate) => candidate.id === finishDrag.taskId)
+  if (!task) return null
+
+  const centerZ = (layout.startZ + layout.finishZ) / 2
+  const depth = Math.max(180, layout.finishZ - layout.startZ + 140)
+
+  const updateFromPoint = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation()
+    const finish = finishDateFromWorldZ(
+      committedProject.statusDate,
+      task.start,
+      finishDrag.originalFinish,
+      event.point.z,
+    )
+    updateFinishDrag(task.id, finish)
+  }
+
+  return (
+    <mesh
+      position={[0, 0.08, centerZ]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      onPointerMove={updateFromPoint}
+      onPointerUp={(event) => {
+        updateFromPoint(event)
+        endFinishDrag()
+      }}
+    >
+      <planeGeometry args={[90, depth]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} side={DoubleSide} />
+    </mesh>
+  )
+}
+
 export function ProjectWorld({
   project,
   analysis,
@@ -314,6 +415,9 @@ export function ProjectWorld({
   scenarioChanges = [],
 }: ProjectWorldProps) {
   const layout = useMemo(() => buildWorldLayout(project), [project])
+  const finishDrag = useProjectStore((state) => state.finishDrag)
+  const beginFinishDrag = useProjectStore((state) => state.beginFinishDrag)
+  const endFinishDrag = useProjectStore((state) => state.endFinishDrag)
   const selectTask = useProjectStore((state) => state.selectTask)
   const driverTaskIds = useMemo(() => new Set(drivers.taskIds), [drivers.taskIds])
   const scenarioChangedTaskIds = useMemo(
@@ -328,10 +432,33 @@ export function ProjectWorld({
   const worldCenterZ = (layout.startZ + layout.finishZ) / 2
   const worldDepth = Math.max(40, layout.finishZ - layout.startZ + 12)
 
+  useEffect(() => {
+    if (!finishDrag) return
+
+    const previousCursor = document.body.style.cursor
+    document.body.style.cursor = 'col-resize'
+    const finish = () => endFinishDrag()
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('blur', finish)
+
+    return () => {
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('blur', finish)
+      document.body.style.cursor = previousCursor
+    }
+  }, [finishDrag, endFinishDrag])
+
   return (
     <>
       <PerspectiveCamera makeDefault position={[18, 14, -11]} fov={48} />
-      <OrbitControls makeDefault target={[0, 0.8, worldCenterZ * 0.55]} minDistance={6} maxDistance={85} maxPolarAngle={Math.PI / 2.04} />
+      <OrbitControls
+        makeDefault
+        enabled={!finishDrag}
+        target={[0, 0.8, worldCenterZ * 0.55]}
+        minDistance={6}
+        maxDistance={85}
+        maxPolarAngle={Math.PI / 2.04}
+      />
 
       <ambientLight intensity={1.15} />
       <directionalLight position={[8, 18, -6]} intensity={2.4} />
@@ -372,8 +499,11 @@ export function ProjectWorld({
           analysis={analysis}
           driverTaskIds={driverTaskIds}
           scenarioChangedTaskIds={scenarioChangedTaskIds}
+          onBeginFinishDrag={beginFinishDrag}
         />
       ))}
+
+      {finishDrag && <FinishDragSurface layout={layout} />}
     </>
   )
 }
