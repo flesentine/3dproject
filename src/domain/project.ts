@@ -9,10 +9,18 @@ export interface Workstream {
   order: number
 }
 
+export interface WorkPackage {
+  id: string
+  name: string
+  workstreamId: string
+  order: number
+}
+
 export interface ProjectTask {
   id: string
   name: string
   workstreamId: string
+  workPackageId?: string
   parentId?: string
   kind: TaskKind
   start: ISODate
@@ -36,6 +44,7 @@ export interface ProjectModel {
   name: string
   statusDate: ISODate
   workstreams: Workstream[]
+  workPackages?: WorkPackage[]
   tasks: ProjectTask[]
   dependencies: Dependency[]
 }
