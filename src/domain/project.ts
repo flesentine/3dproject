@@ -2,6 +2,7 @@ export type ISODate = string
 
 export type TaskKind = 'task' | 'milestone' | 'summary'
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF'
+export type ScenarioEditKind = 'finish' | 'start' | 'shift'
 
 export interface Workstream {
   id: string
@@ -110,6 +111,8 @@ export interface ScenarioTaskChange {
 
 export interface ScheduleScenario {
   sourceTaskId: string
+  editKind: ScenarioEditKind
+  requestedStart: ISODate
   requestedFinish: ISODate
   project: ProjectModel
   analysis: ScheduleAnalysis
