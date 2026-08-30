@@ -100,7 +100,11 @@ function candidateStartFromRelationship(
   return addWorkingDays(originalSuccessor.start, incrementalShift)
 }
 
-function buildChanges(base: ProjectModel, scenario: ProjectModel, sourceTaskId: string): ScenarioTaskChange[] {
+export function compareProjectSchedules(
+  base: ProjectModel,
+  scenario: ProjectModel,
+  sourceTaskId: string,
+): ScenarioTaskChange[] {
   const scenarioById = new Map(scenario.tasks.map((task) => [task.id, task]))
 
   return base.tasks.flatMap((original) => {
@@ -245,7 +249,7 @@ export function simulateTaskEdit(
     tasks: project.tasks.map((task) => scenarioTaskById.get(task.id) ?? task),
   }
   const analysis = scheduleEngine.analyze(scenarioProject)
-  const changes = buildChanges(project, scenarioProject, taskId)
+  const changes = compareProjectSchedules(project, scenarioProject, taskId)
 
   return {
     ok: true,
