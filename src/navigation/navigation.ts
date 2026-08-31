@@ -110,6 +110,11 @@ export function searchProject(project: ProjectModel, rawQuery: string, limit = 8
     .slice(0, limit)
 }
 
+/**
+ * Camera convention: approach schedule geometry from the +Z (future/front)
+ * side and from above. Drei Text faces +Z, so this keeps labels readable and
+ * prevents a semantic "dive in" from landing behind the task/package.
+ */
 function frameVisuals(layout: WorldLayout, visuals: WorldLayout['tasks'], x: number, distanceScale: number): NavigationFrame | null {
   if (visuals.length === 0) return null
   const minZ = Math.min(...visuals.map((visual) => visual.position[2] - visual.size[2] / 2))
@@ -118,7 +123,7 @@ function frameVisuals(layout: WorldLayout, visuals: WorldLayout['tasks'], x: num
   const span = Math.max(4, maxZ - minZ)
   return {
     target: [x, 0.75, centerZ],
-    position: [x + 7.5 * distanceScale, 6.2 * distanceScale, centerZ - Math.min(20, span * 0.32 + 7) * distanceScale],
+    position: [x + 7.5 * distanceScale, 6.2 * distanceScale, centerZ + Math.min(20, span * 0.32 + 7) * distanceScale],
   }
 }
 
@@ -132,7 +137,7 @@ export function getNavigationFrame(
   if (request.kind === 'today') {
     return {
       target: [0, 0.85, layout.todayZ],
-      position: [15, 11, layout.todayZ - 15],
+      position: [15, 11, layout.todayZ + 15],
     }
   }
 
@@ -142,7 +147,7 @@ export function getNavigationFrame(
       const depth = Math.max(visual.size[2], 1)
       return {
         target: [visual.position[0], Math.max(0.7, visual.position[1]), visual.position[2]],
-        position: [visual.position[0] + 6.5, 5.2, visual.position[2] - Math.max(7, depth * 0.7 + 5)],
+        position: [visual.position[0] + 6.5, 5.2, visual.position[2] + Math.max(7, depth * 0.7 + 5)],
       }
     }
   }
@@ -168,6 +173,6 @@ export function getNavigationFrame(
   const width = Math.max(18, project.workstreams.length * 4.2)
   return {
     target: [0, 0.8, worldCenterZ],
-    position: [Math.max(18, width * 0.65), 16, worldCenterZ - 24],
+    position: [Math.max(18, width * 0.65), 16, worldCenterZ + 24],
   }
 }
