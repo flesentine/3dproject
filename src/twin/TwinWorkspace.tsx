@@ -1,9 +1,16 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { maxISODate, minISODate, parseISODate } from '../domain/dates'
-import type { ProjectModel, ScenarioTaskChange, ScheduleAnalysis } from '../domain/project'
+import type { ISODate, ProjectModel, ProjectTask, ScenarioTaskChange, ScheduleAnalysis } from '../domain/project'
 import { getWorkPackage } from '../hierarchy/hierarchy'
-import type { AnalysisMode } from '../state/useProjectStore'
-import { buildGanttScale, buildTwinRows, ganttBarGeometry, ganttMarkerPercent } from './model'
+import { useProjectStore, type AnalysisMode } from '../state/useProjectStore'
+import {
+  deriveGanttDragPreview,
+  ganttDateFromClientX,
+  snapGanttDateToWeekday,
+  type GanttDragKind,
+} from './ganttDrag'
+import { buildGanttScale, buildTwinRows, ganttBarGeometry, ganttMarkerPercent, type GanttScale } from './model'
+import './ganttEditing.css'
 
 export type TwinView = 'table' | 'gantt'
 
@@ -20,6 +27,16 @@ interface TwinWorkspaceProps {
   scenarioChanges?: ScenarioTaskChange[]
   onSelectTask: (taskId: string) => void
   onFocusTask: (taskId: string) => void
+}
+
+interface ActiveGanttDrag {
+  taskId: string
+  kind: GanttDragKind
+  anchorDate: ISODate
+  pointerDate: ISODate
+  scale: GanttScale
+  originalStart: ISODate
+  originalFinish: ISODate
 }
 
 function shortDate(value: string) {
@@ -70,6 +87,15 @@ export function TwinWorkspace({
   onSelectTask,
   onFocusTask,
 }: TwinWorkspaceProps) {
+  const beginFinishDrag = useProjectStore((state) => state.beginFinishDrag)
+  const updateFinishDrag = useProjectStore((state) => state.updateFinishDrag)
+  const endFinishDrag = useProjectStore((state) => state.endFinishDrag)
+  const beginDirectDrag = useProjectStore((state) => state.beginDirectDrag)
+  const updateDirectDrag = useProjectStore((state) => state.updateDirectDrag)
+  const endDirectDrag = useProjectStore((state) => state.endDirectDrag)
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const [ganttDrag, setGanttDrag] = useState<ActiveGanttDrag | null>(null)
+
   const scenarioChangedIds = useMemo(
     () => scenarioChanges.map((change) => change.taskId),
     [scenarioChanges],
@@ -93,7 +119,116 @@ export function TwinWorkspace({
     [committedProject.tasks],
   )
 
+  const dateValues = useMemo(() => [
+    ...project.tasks.flatMap((task) => [task.start, task.finish]),
+    ...committedProject.tasks.flatMap((task) => [task.start, task.finish]),
+    project.statusDate,
+  ], [committedProject.tasks, project.statusDate, project.tasks])
+  const scale = useMemo(
+    () => buildGanttScale(minISODate(dateValues), maxISODate(dateValues)),
+    [dateValues],
+  )
+  const todayPercent = ganttMarkerPercent(scale, project.statusDate)
   const scope = scopeLabel(project, focusedWorkstreamId, focusedWorkPackageId)
+
+  const beginGanttDrag = (
+    event: ReactPointerEvent<HTMLElement>,
+    task: ProjectTask,
+    kind: GanttDragKind,
+  ) => {
+    if (task.kind !== 'task') return
+    const committed = committedById.get(task.id)
+    const timeline = timelineRef.current
+    if (!committed || !timeline) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    onSelectTask(task.id)
+
+    const rect = timeline.getBoundingClientRect()
+    const rawAnchor = ganttDateFromClientX(scale, rect.left, rect.width, event.clientX)
+    const anchorDate = snapGanttDateToWeekday(rawAnchor, rawAnchor)
+
+    setGanttDrag({
+      taskId: task.id,
+      kind,
+      anchorDate,
+      pointerDate: anchorDate,
+      scale,
+      originalStart: committed.start,
+      originalFinish: committed.finish,
+    })
+
+    if (kind === 'finish') beginFinishDrag(task.id)
+    else beginDirectDrag(task.id, kind === 'start' ? 'start' : 'shift', 0)
+  }
+
+  useEffect(() => {
+    if (!ganttDrag) return
+
+    const previousCursor = document.body.style.cursor
+    document.body.style.cursor = ganttDrag.kind === 'shift' ? 'grabbing' : 'ew-resize'
+
+    const update = (event: PointerEvent) => {
+      const timeline = timelineRef.current
+      if (!timeline) return
+      const rect = timeline.getBoundingClientRect()
+      const rawDate = ganttDateFromClientX(
+        ganttDrag.scale,
+        rect.left,
+        rect.width,
+        event.clientX,
+      )
+      const committedTask = committedById.get(ganttDrag.taskId)
+      if (!committedTask) return
+
+      const preview = deriveGanttDragPreview(
+        { start: ganttDrag.originalStart, finish: ganttDrag.originalFinish },
+        ganttDrag.kind,
+        ganttDrag.anchorDate,
+        rawDate,
+        ganttDrag.pointerDate,
+      )
+
+      setGanttDrag((current) => current ? { ...current, pointerDate: preview.pointerDate } : current)
+
+      if (ganttDrag.kind === 'finish') {
+        updateFinishDrag(ganttDrag.taskId, preview.finish)
+      } else {
+        updateDirectDrag(ganttDrag.taskId, preview.start, preview.finish)
+      }
+    }
+
+    const finish = (event?: PointerEvent) => {
+      if (event) update(event)
+      if (ganttDrag.kind === 'finish') endFinishDrag()
+      else endDirectDrag()
+      setGanttDrag(null)
+    }
+
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') finish()
+    }
+
+    window.addEventListener('pointermove', update)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('blur', finish)
+    window.addEventListener('keydown', cancel)
+    return () => {
+      window.removeEventListener('pointermove', update)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('blur', finish)
+      window.removeEventListener('keydown', cancel)
+      document.body.style.cursor = previousCursor
+    }
+  }, [
+    committedById,
+    endDirectDrag,
+    endFinishDrag,
+    ganttDrag,
+    updateDirectDrag,
+    updateFinishDrag,
+  ])
 
   if (view === 'table') {
     return (
@@ -181,26 +316,24 @@ export function TwinWorkspace({
     )
   }
 
-  const dateValues = [
-    ...project.tasks.flatMap((task) => [task.start, task.finish]),
-    ...committedProject.tasks.flatMap((task) => [task.start, task.finish]),
-    project.statusDate,
-  ]
-  const scale = buildGanttScale(minISODate(dateValues), maxISODate(dateValues))
-  const todayPercent = ganttMarkerPercent(scale, project.statusDate)
-
   return (
-    <section className="twin-workspace gantt-view" aria-label="2D project Gantt chart">
+    <section className={`twin-workspace gantt-view${ganttDrag ? ' gantt-editing' : ''}`} aria-label="2D project Gantt chart">
       <header className="twin-header">
         <div>
-          <p className="panel-label">2D twin · Gantt</p>
+          <p className="panel-label">2D twin · interactive Gantt</p>
           <h2>{scope}</h2>
         </div>
         <div className="twin-summary">
           <span>{rows.length} visible</span>
           <span>{shortDate(scale.start)} → {shortDate(scale.finish)}</span>
+          {ganttDrag && <span className="gantt-edit-chip">{ganttDrag.kind.toUpperCase()}</span>}
         </div>
       </header>
+
+      <div className="gantt-edit-hint">
+        <strong>Drag the bar to move</strong>
+        <span>Grab the blue left edge for START or gold right edge for FINISH. Release to keep a scenario preview.</span>
+      </div>
 
       <div className="gantt-shell">
         <div className="gantt-name-header">Activity</div>
@@ -230,7 +363,7 @@ export function TwinWorkspace({
           })}
         </div>
 
-        <div className="gantt-timeline">
+        <div className="gantt-timeline" ref={timelineRef}>
           <div className="gantt-grid" aria-hidden="true">
             {scale.ticks.map((tick) => (
               <span key={tick.date} style={{ left: `${tick.leftPercent}%` }} />
@@ -251,12 +384,13 @@ export function TwinWorkspace({
             const persistentBaseline = task.baselineStart && task.baselineFinish
               ? ganttBarGeometry(scale, { start: task.baselineStart, finish: task.baselineFinish, kind: task.kind })
               : null
+            const activelyDragging = ganttDrag?.taskId === task.id
 
             return (
               <button
                 key={task.id}
                 type="button"
-                className={rowClass(task.id, selectedTaskId, row.isCritical, row.isDriver, row.isScenarioChanged)}
+                className={`${rowClass(task.id, selectedTaskId, row.isCritical, row.isDriver, row.isScenarioChanged)}${activelyDragging ? ' active-gantt-drag' : ''}`}
                 onClick={() => onSelectTask(task.id)}
                 onDoubleClick={() => onFocusTask(task.id)}
                 aria-label={`${task.name}: ${task.start} to ${task.finish}`}
@@ -280,10 +414,26 @@ export function TwinWorkspace({
                     row.isCritical ? 'critical' : '',
                     row.isDriver ? 'driver' : '',
                     row.isScenarioChanged ? 'scenario' : '',
+                    task.kind === 'task' ? 'editable' : '',
                   ].filter(Boolean).join(' ')}
                   style={{ left: `${geometry.leftPercent}%`, width: `${geometry.widthPercent}%` }}
+                  onPointerDown={task.kind === 'task' ? (event) => beginGanttDrag(event, task, 'shift') : undefined}
                 >
                   {!geometry.milestone && <span className="gantt-progress" style={{ width: `${Math.round(task.progress * 100)}%` }} />}
+                  {task.kind === 'task' && (
+                    <>
+                      <span
+                        className="gantt-drag-handle start"
+                        aria-hidden="true"
+                        onPointerDown={(event) => beginGanttDrag(event, task, 'start')}
+                      />
+                      <span
+                        className="gantt-drag-handle finish"
+                        aria-hidden="true"
+                        onPointerDown={(event) => beginGanttDrag(event, task, 'finish')}
+                      />
+                    </>
+                  )}
                 </span>
               </button>
             )
@@ -292,7 +442,7 @@ export function TwinWorkspace({
       </div>
 
       <footer className="gantt-legend">
-        <span><i className="legend-bar" /> Current</span>
+        <span><i className="legend-bar" /> Current / drag to move</span>
         <span><i className="legend-ghost" /> Committed / baseline</span>
         <span><i className="legend-critical" /> Critical</span>
         <span><i className="legend-scenario" /> Scenario moved</span>
