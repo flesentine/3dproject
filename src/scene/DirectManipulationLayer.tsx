@@ -1,20 +1,32 @@
 import { Line, Text } from '@react-three/drei'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
-import { DoubleSide } from 'three'
+import { DoubleSide, Vector3 } from 'three'
 import { useProjectStore } from '../state/useProjectStore'
 import { shiftTaskDatesFromWorldZ, startDateFromWorldZ } from '../visualization/directDrag'
 import { buildWorldLayout } from '../visualization/layout'
 
 interface OrbitControlsLike {
   enabled: boolean
+  target: Vector3
+  minDistance: number
+  maxDistance: number
+  minPolarAngle: number
+  maxPolarAngle: number
+  zoomSpeed: number
+  enableDamping: boolean
+  dampingFactor: number
+  update: () => void
 }
 
 const startColor = '#7fd8ff'
 const moveColor = '#b7a4ff'
+const MIN_CAMERA_DISTANCE = 5
+const MAX_CAMERA_DISTANCE = 46
 
 export function DirectManipulationLayer() {
   const controls = useThree((state) => state.controls) as OrbitControlsLike | null
+  const camera = useThree((state) => state.camera)
   const project = useProjectStore((state) => state.project)
   const scenario = useProjectStore((state) => state.scenario)
   const selectedTaskId = useProjectStore((state) => state.selectedTaskId)
@@ -31,6 +43,22 @@ export function DirectManipulationLayer() {
   const dragging = Boolean(directDrag)
 
   useEffect(() => {
+    if (!controls) return
+
+    // Trackpads can emit a large stream of wheel deltas. OrbitControls' default
+    // zoom speed is much too aggressive for this project scale, so keep zoom
+    // deliberate and bounded even on inertial two-finger gestures.
+    controls.zoomSpeed = 0.22
+    controls.minDistance = MIN_CAMERA_DISTANCE
+    controls.maxDistance = MAX_CAMERA_DISTANCE
+    controls.minPolarAngle = 0.28
+    controls.maxPolarAngle = Math.PI / 2.08
+    controls.enableDamping = true
+    controls.dampingFactor = 0.085
+    controls.update()
+  }, [controls])
+
+  useEffect(() => {
     if (!dragging || !controls) return
     const previous = controls.enabled
     controls.enabled = false
@@ -41,6 +69,22 @@ export function DirectManipulationLayer() {
 
   useFrame(() => {
     if (dragging && controls) controls.enabled = false
+    if (!controls) return
+
+    // Hard safety net: even if a browser/trackpad sends an unusually large
+    // wheel burst, never allow the camera to disappear outside the useful
+    // project-navigation envelope.
+    const offset = camera.position.clone().sub(controls.target)
+    const distance = offset.length()
+    if (distance > MAX_CAMERA_DISTANCE) {
+      offset.setLength(MAX_CAMERA_DISTANCE)
+      camera.position.copy(controls.target).add(offset)
+      controls.update()
+    } else if (distance < MIN_CAMERA_DISTANCE) {
+      offset.setLength(MIN_CAMERA_DISTANCE)
+      camera.position.copy(controls.target).add(offset)
+      controls.update()
+    }
   })
 
   useEffect(() => {
