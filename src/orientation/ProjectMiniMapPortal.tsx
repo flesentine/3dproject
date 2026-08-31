@@ -7,6 +7,9 @@ import { buildWorldLayout } from '../visualization/layout'
 import { ProjectMiniMap } from './ProjectMiniMap'
 import { useOrientationStore } from './useOrientationStore'
 
+const MIN_CAMERA_DISTANCE = 5
+const MAX_CAMERA_DISTANCE = 46
+
 function distanceBetween(
   left: [number, number, number],
   right: [number, number, number],
@@ -57,7 +60,10 @@ export function ProjectMiniMapPortal() {
     reportCamera({
       position: frame.position,
       target: frame.target,
-      distance: distanceBetween(frame.position, frame.target),
+      distance: Math.min(
+        MAX_CAMERA_DISTANCE,
+        Math.max(MIN_CAMERA_DISTANCE, distanceBetween(frame.position, frame.target)),
+      ),
     })
   }, [displayProject, navigationRequest, portalTarget, reportCamera])
 
@@ -67,10 +73,14 @@ export function ProjectMiniMapPortal() {
     const onWheel = (event: WheelEvent) => {
       const current = useOrientationStore.getState().camera
       if (!current) return
-      const factor = Math.exp(event.deltaY * 0.0011)
+      // Mirror the deliberately slow trackpad feel used by the 3D OrbitControls.
+      const factor = Math.exp(event.deltaY * 0.00035)
       reportCamera({
         ...current,
-        distance: Math.min(95, Math.max(4, current.distance * factor)),
+        distance: Math.min(
+          MAX_CAMERA_DISTANCE,
+          Math.max(MIN_CAMERA_DISTANCE, current.distance * factor),
+        ),
       })
     }
 
