@@ -94,6 +94,7 @@ export function TwinWorkspace({
   const updateDirectDrag = useProjectStore((state) => state.updateDirectDrag)
   const endDirectDrag = useProjectStore((state) => state.endDirectDrag)
   const timelineRef = useRef<HTMLDivElement>(null)
+  const ganttDragRef = useRef<ActiveGanttDrag | null>(null)
   const [ganttDrag, setGanttDrag] = useState<ActiveGanttDrag | null>(null)
 
   const scenarioChangedIds = useMemo(
@@ -148,8 +149,7 @@ export function TwinWorkspace({
     const rect = timeline.getBoundingClientRect()
     const rawAnchor = ganttDateFromClientX(scale, rect.left, rect.width, event.clientX)
     const anchorDate = snapGanttDateToWeekday(rawAnchor, rawAnchor)
-
-    setGanttDrag({
+    const drag: ActiveGanttDrag = {
       taskId: task.id,
       kind,
       anchorDate,
@@ -157,7 +157,10 @@ export function TwinWorkspace({
       scale,
       originalStart: committed.start,
       originalFinish: committed.finish,
-    })
+    }
+
+    ganttDragRef.current = drag
+    setGanttDrag(drag)
 
     if (kind === 'finish') beginFinishDrag(task.id)
     else beginDirectDrag(task.id, kind === 'start' ? 'start' : 'shift', 0)
@@ -170,54 +173,64 @@ export function TwinWorkspace({
     document.body.style.cursor = ganttDrag.kind === 'shift' ? 'grabbing' : 'ew-resize'
 
     const update = (event: PointerEvent) => {
+      const drag = ganttDragRef.current
       const timeline = timelineRef.current
-      if (!timeline) return
+      if (!drag || !timeline) return
       const rect = timeline.getBoundingClientRect()
       const rawDate = ganttDateFromClientX(
-        ganttDrag.scale,
+        drag.scale,
         rect.left,
         rect.width,
         event.clientX,
       )
-      const committedTask = committedById.get(ganttDrag.taskId)
+      const committedTask = committedById.get(drag.taskId)
       if (!committedTask) return
 
       const preview = deriveGanttDragPreview(
-        { start: ganttDrag.originalStart, finish: ganttDrag.originalFinish },
-        ganttDrag.kind,
-        ganttDrag.anchorDate,
+        { start: drag.originalStart, finish: drag.originalFinish },
+        drag.kind,
+        drag.anchorDate,
         rawDate,
-        ganttDrag.pointerDate,
+        drag.pointerDate,
       )
+      ganttDragRef.current = { ...drag, pointerDate: preview.pointerDate }
 
-      setGanttDrag((current) => current ? { ...current, pointerDate: preview.pointerDate } : current)
-
-      if (ganttDrag.kind === 'finish') {
-        updateFinishDrag(ganttDrag.taskId, preview.finish)
+      if (drag.kind === 'finish') {
+        updateFinishDrag(drag.taskId, preview.finish)
       } else {
-        updateDirectDrag(ganttDrag.taskId, preview.start, preview.finish)
+        updateDirectDrag(drag.taskId, preview.start, preview.finish)
       }
     }
 
-    const finish = (event?: PointerEvent) => {
-      if (event) update(event)
-      if (ganttDrag.kind === 'finish') endFinishDrag()
+    const finishPointer = (event: PointerEvent) => {
+      update(event)
+      const drag = ganttDragRef.current
+      if (drag?.kind === 'finish') endFinishDrag()
       else endDirectDrag()
+      ganttDragRef.current = null
+      setGanttDrag(null)
+    }
+
+    const finishWithoutPointer = () => {
+      const drag = ganttDragRef.current
+      if (drag?.kind === 'finish') endFinishDrag()
+      else endDirectDrag()
+      ganttDragRef.current = null
       setGanttDrag(null)
     }
 
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') finish()
+      if (event.key === 'Escape') finishWithoutPointer()
     }
 
     window.addEventListener('pointermove', update)
-    window.addEventListener('pointerup', finish)
-    window.addEventListener('blur', finish)
+    window.addEventListener('pointerup', finishPointer)
+    window.addEventListener('blur', finishWithoutPointer)
     window.addEventListener('keydown', cancel)
     return () => {
       window.removeEventListener('pointermove', update)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('blur', finish)
+      window.removeEventListener('pointerup', finishPointer)
+      window.removeEventListener('blur', finishWithoutPointer)
       window.removeEventListener('keydown', cancel)
       document.body.style.cursor = previousCursor
     }
@@ -225,7 +238,7 @@ export function TwinWorkspace({
     committedById,
     endDirectDrag,
     endFinishDrag,
-    ganttDrag,
+    Boolean(ganttDrag),
     updateDirectDrag,
     updateFinishDrag,
   ])
