@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -37,17 +37,29 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build for GitHub Pages
-        run: npm run build -- --base=/3dproject/
+      - name: Build browser demo
+        run: npm run build -- --base=./
 
-      - name: Configure Pages
+      - name: Publish fallback demo branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: live-demo
+          publish_dir: ./dist
+          force_orphan: true
+
+      - name: Configure GitHub Pages
+        id: pages_config
+        continue-on-error: true
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: steps.pages_config.outcome == 'success'
         uses: actions/upload-pages-artifact@v4
         with:
           path: ./dist
 
       - name: Deploy to GitHub Pages
+        if: steps.pages_config.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4
