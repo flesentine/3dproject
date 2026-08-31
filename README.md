@@ -6,9 +6,9 @@ The core thesis: complex projects should be easier to understand when time, hier
 
 ## Status
 
-**Build 9 — History and Scenario Branches is complete.**
+**Build 10 — Interactive Gantt and Camera Polish is complete.**
 
-The prototype now supports safe schedule exploration on top of the Build 8 direct-manipulation model. What-if previews can be named and saved as reusable scenario branches, while only **Apply** creates committed project history. Applied changes can then be moved backward and forward with **Undo / Redo** without deleting saved alternatives.
+Build 10 fixes two major 3D navigation problems and makes the Gantt a first-class editing surface. Semantic dive-in now approaches tasks, packages, workstreams, Today, and Overview from the readable label-facing future side instead of landing behind the world. Trackpad zoom is damped and hard-clamped to a useful camera envelope. In Gantt, drag the bar body to **MOVE**, the blue left grip to resize **START**, or the gold right grip to resize **FINISH**; every gesture uses the same reversible scenario engine as 3D.
 
 - Master specification: [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md)
 - Build 0 foundation: [`docs/BUILD_0.md`](docs/BUILD_0.md)
@@ -21,6 +21,7 @@ The prototype now supports safe schedule exploration on top of the Build 8 direc
 - Build 7 project mini-map and orientation: [`docs/BUILD_7.md`](docs/BUILD_7.md)
 - Build 8 full direct manipulation: [`docs/BUILD_8.md`](docs/BUILD_8.md)
 - Build 9 history and scenario branches: [`docs/BUILD_9.md`](docs/BUILD_9.md)
+- Build 10 interactive Gantt and camera polish: [`docs/BUILD_10.md`](docs/BUILD_10.md)
 
 ## Product rule
 
@@ -43,6 +44,29 @@ npm run build
 ```
 
 ## Current capabilities
+
+### Build 10 navigation safety
+
+- Semantic dive-in always approaches from the +Z future/front side where task labels are readable
+- Task, work-package, workstream, Today, and Overview framing use the same orientation convention
+- Camera remains above the schedule instead of slipping below the world
+- Trackpad/wheel zoom speed reduced substantially
+- OrbitControls damping enabled for smoother inertial navigation
+- Minimum and maximum camera distance enforced
+- Hard per-frame camera distance safety clamp prevents extreme wheel bursts from making the project disappear
+
+### Interactive 2D Gantt
+
+- Drag a normal task bar body to **MOVE** it while preserving working-day duration
+- Drag the blue left grip to resize **START** only
+- Drag the gold right grip to resize **FINISH** only
+- Weekend snapping follows current drag direction
+- Start and finish handles cannot cross
+- Pointer-to-calendar mapping is frozen for the duration of the gesture to avoid timeline-scale jitter
+- Releasing a Gantt gesture leaves a normal reversible scenario preview
+- 3D, Table, CPM, float, Critical Path, Drivers, ghosts, and scenario history update from the same preview
+- Apply / Reset behavior is identical whether the scenario began in 3D or Gantt
+- Gantt direct manipulation deliberately reuses the Build 8 scenario engine rather than implementing separate scheduling math
 
 ### Safe exploration history
 
@@ -74,7 +98,7 @@ npm run build
 
 - **3D** spatial schedule and causal simulation view
 - **Table** for dense schedule inspection
-- **Gantt** for conventional calendar/time reading
+- **Gantt** for conventional calendar/time reading and direct editing
 - One shared `ProjectModel` across all renderers
 - One shared CPM/driver analysis across all renderers
 - Shared selected activity and hierarchy focus
@@ -85,13 +109,13 @@ npm run build
 
 ### Full direct manipulation
 
-- Blue **START** handle resizes only the task start edge
-- Purple **MOVE** control shifts the whole task through time
-- Gold **FINISH** handle resizes only the task finish edge
+- Blue **START** handle resizes only the task start edge in 3D and Gantt
+- Purple **MOVE** control shifts the whole task through time in 3D; Gantt bar body performs the same edit
+- Gold **FINISH** handle resizes only the task finish edge in 3D and Gantt
 - Start/finish edges cannot cross each other
 - Whole-task movement preserves working-day duration
 - Weekend snapping follows drag direction
-- Orbit controls lock during all three gestures
+- Orbit controls lock during 3D gestures
 - Navigation, search, view switching, mini-map actions, and Apply/Reset lock during active drag
 - In-world date feedback while dragging
 - Every gesture produces the same reversible `ScheduleScenario`
@@ -128,7 +152,7 @@ npm run build
 - Task duration represented spatially
 - Progress fill
 - Milestone beacons
-- Orbit and zoom navigation
+- Orbit and bounded zoom navigation
 - Click selection and shared inspector
 - Stable geography across analysis modes, hierarchy focus, scenario changes, and history revisions
 - Animated task movement when scenario dates change
@@ -144,19 +168,6 @@ npm run build
 - Scenario-moved treatment
 - Committed finish shown when a scenario moves an activity
 - Progress visualization
-- Click to select
-- Double-click to synchronize hierarchy focus to the activity
-
-### 2D Gantt
-
-- Calendar timeline with weekly ticks
-- Today marker
-- Task bars and milestone diamonds
-- Progress fill
-- Critical and driver treatments
-- Scenario-moved treatment
-- Committed-position ghost during scenario preview
-- Persistent task baselines when baseline dates exist
 - Click to select
 - Double-click to synchronize hierarchy focus to the activity
 
@@ -215,7 +226,7 @@ npm run build
 ## Initial V0.1 direction
 
 - Keyboard navigation shortcuts and optional free-flight mode
-- Gantt drag editing through the existing scenario engine
+- Milestone direct dragging in Gantt and 3D
 - Scenario persistence / import-export only after the local interaction model is proven
 - Richer recursive hierarchy below work package only if the current semantic model proves useful
 - Later project/resource calendars and holidays
