@@ -1,0 +1,101 @@
+.gantt-edit-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(128, 166, 206, 0.16);
+  border-radius: 8px;
+  background: rgba(13, 22, 32, 0.74);
+  color: #91a4b9;
+  font-size: 0.74rem;
+}
+
+.gantt-edit-hint strong {
+  color: #dce8f4;
+  white-space: nowrap;
+}
+
+.gantt-edit-chip {
+  color: #f3db9e !important;
+  border-color: rgba(241, 199, 106, 0.45) !important;
+  background: rgba(77, 61, 24, 0.45) !important;
+}
+
+.gantt-bar.editable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.gantt-editing .gantt-bar.editable,
+.active-gantt-drag .gantt-bar.editable {
+  cursor: grabbing;
+}
+
+.gantt-bar.editable::after {
+  content: '';
+  position: absolute;
+  inset: -4px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  pointer-events: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.gantt-bar.editable:hover::after,
+.active-gantt-drag .gantt-bar.editable::after {
+  border-color: rgba(222, 232, 245, 0.32);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.gantt-drag-handle {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 10px;
+  z-index: 5;
+  opacity: 0;
+  border-radius: 4px;
+  transition: opacity 120ms ease, transform 120ms ease;
+  touch-action: none;
+}
+
+.gantt-drag-handle.start {
+  left: -5px;
+  cursor: ew-resize;
+  background: #7fd8ff;
+  box-shadow: 0 0 10px rgba(127, 216, 255, 0.55);
+}
+
+.gantt-drag-handle.finish {
+  right: -5px;
+  cursor: ew-resize;
+  background: #f5d98c;
+  box-shadow: 0 0 10px rgba(245, 217, 140, 0.55);
+}
+
+.gantt-bar.editable:hover .gantt-drag-handle,
+.twin-row.selected .gantt-bar.editable .gantt-drag-handle,
+.active-gantt-drag .gantt-drag-handle {
+  opacity: 0.95;
+}
+
+.gantt-drag-handle:hover {
+  transform: scaleX(1.28);
+}
+
+.active-gantt-drag {
+  background: rgba(241, 199, 106, 0.035) !important;
+}
+
+.active-gantt-drag .gantt-bar {
+  filter: brightness(1.16);
+  box-shadow: 0 0 0 1px rgba(241, 199, 106, 0.5), 0 0 16px rgba(241, 199, 106, 0.18);
+}
+
+@media (max-width: 900px) {
+  .gantt-edit-hint {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.18rem;
+  }
+}
